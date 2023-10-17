@@ -1,0 +1,11 @@
+resnet18
+clean  79.86%
+attack 25.63%
+
+resnet50
+clean  91.04%
+attack 81.11%
+
+ViT
+clean  92.77%
+attack 89.54%

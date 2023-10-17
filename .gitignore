@@ -1,0 +1,6 @@
+data/**/*.jpg
+data/**/*.JPEG
+data/**/*.png
+data/**/*.csv
+
+**/.DS_Store
