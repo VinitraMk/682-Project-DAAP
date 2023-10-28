@@ -14,7 +14,7 @@ from PIL import Image
 import utils
 import config as C
 
-def gradcam_defense(attacked_img_folder, save_folder, args, filter_mode="none"):
+def gradcam_defense(attacked_img_folder, save_folder, args, filter_mode="gt"):
     dataset = torchvision.datasets.ImageFolder(
         attacked_img_folder
     )
@@ -57,14 +57,15 @@ def gradcam_defense(attacked_img_folder, save_folder, args, filter_mode="none"):
                 
 
                 img = img * (1 - gcam)
-                img = torch.Tensor(img).transpose(0, 2)
+                img = torch.Tensor(img).transpose(0, 2).transpose(1, 2)
             else:
                 img = 255*to_tensor(img)
         elif filter_mode == "none":
             gcam = get_gradcam(img)
             gcam = gcam[:, :, None]
-            img = img * (gcam)
-            img = torch.Tensor(img).transpose(0, 2)
+            img = img * (1 - gcam)
+            # print(img.shape)
+            img = torch.Tensor(img).transpose(0, 2).transpose(1, 2)
         else:
             gcam = get_gradcam(img)
             gcam = (gcam - gcam.min())/(gcam.max() - gcam.min())
@@ -75,7 +76,7 @@ def gradcam_defense(attacked_img_folder, save_folder, args, filter_mode="none"):
             gcam2 = (gcam2 - gcam2.min())/(gcam2.max() - gcam2.min())
             if gcam.std() > gcam2.std():
                 img = img * (1 - gcam)
-                img = torch.Tensor(img).transpose(0, 2)
+                img = torch.Tensor(img).transpose(0, 2).transpose(1, 2)
             else:
                 img = 255*to_tensor(img)
         os.makedirs(os.path.join(save_folder, str(data_classid2name[label])), exist_ok=True)

@@ -1,11 +1,27 @@
 resnet18
-clean  79.86%
-attack 25.63%
+clean                   79.86%
+attack                  25.63%
+gradcam-defense         21.30%
+gradcam-defense use-gt  31.14%
 
 resnet50
-clean  91.04%
-attack 81.11%
+clean                   91.04%
+attack                  81.11%
+gradcam-defense         67.08%
+gradcam-defense use-gt  81.00%
 
-ViT
-clean  92.77%
-attack 89.54%
+
+
+Custom attack
+
+resnet18
+clean                   79.86%
+attack                  13.52%
+gradcam-defense         34.82%
+gradcam-defense use-gt  42.69%
+
+resnet50
+clean                   91.04%
+attack                  68.86%
+gradcam-defense         77.53%
+gradcam-defense use-gt  82.21%
