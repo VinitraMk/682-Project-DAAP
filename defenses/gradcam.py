@@ -14,7 +14,7 @@ from PIL import Image
 import utils
 import config as C
 
-def gradcam_defense(attacked_img_folder, save_folder, args, filter_mode="gt"):
+def gradcam_defense(attacked_img_folder, save_folder, args, filter_mode="none"):
     dataset = torchvision.datasets.ImageFolder(
         attacked_img_folder
     )

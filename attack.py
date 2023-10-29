@@ -17,7 +17,7 @@ def unnormalize(img):
     s = s.unsqueeze(1).unsqueeze(1)
     return img * s + m
 
-def attack_folder(raw_img_folder, save_folder, args):
+def attack_folder(raw_img_folder, save_folder, args, zero_out=False):
     with gzip.open("data/imagenet_patch.gz", 'rb') as f:
         patches, targets, class_dict = pickle.load(f)
     dataset = torchvision.datasets.ImageFolder(
@@ -29,8 +29,11 @@ def attack_folder(raw_img_folder, save_folder, args):
     count = 0
     for img, label in tqdm.tqdm(dataset, desc="Attacking"):
         patch_num = np.random.randint(10)
+        patch = patches[patch_num]
+        if zero_out:
+            patch = 0 * patch
         apply_patch = utils.ApplyPatch(
-            patches[patch_num],
+            patch,
             translation_range=(0.3, 0.3),    # translation fraction wrt image dimensions
             rotation_range=10,             # maximum absolute value of the rotation in degree
             scale_range=(1, 1.2)           # scale range wrt image dimensions
@@ -50,7 +53,4 @@ def attack_folder(raw_img_folder, save_folder, args):
         write_png(img.to(torch.uint8), os.path.join(save_folder, str(C.CLASS_ID2NAME[label]), "{}.jpg".format(count)))
 
         count += 1
-
-
-
 

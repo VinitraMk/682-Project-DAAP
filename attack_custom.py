@@ -92,7 +92,13 @@ def attack_custom_folder(raw_img_folder, target, use_cuda, patch_path, save_dir,
 
     # Initialise patch
     mask = torch.zeros((1, 3, IMG_SIZE, IMG_SIZE))
-    mask[:, :, :PATCH_SIZE, :PATCH_SIZE] = 1
+    if args.patch_shape == "square":
+        mask[:, :, :PATCH_SIZE, :PATCH_SIZE] = 1
+    elif args.patch_shape == "circle":
+        for i_ in range(IMG_SIZE):
+            for j_ in range(IMG_SIZE):
+                if (i_ - PATCH_SIZE//2) ** 2 + (j_ - PATCH_SIZE//2) ** 2 < (PATCH_SIZE//2)**2:
+                    mask[:, :, i_, j_] = 1
 
     patch_img = torch.zeros((1, 3, IMG_SIZE, IMG_SIZE))
     patch_img[:, :, :PATCH_SIZE, :PATCH_SIZE] = torch.rand((3, PATCH_SIZE, PATCH_SIZE))
@@ -226,6 +232,7 @@ def generate_attacked_dataset(raw_img_folder, patch_path, save_dir):
     }
 
     patch_img = read_image(patch_path)
+    patch_img = patch_img[:3, ...]
     patch_img = patch_img/255.0
     patch_img = (patch_img - m)/ s
     patch_img = patch_img.unsqueeze(0)
