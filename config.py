@@ -2,6 +2,8 @@ import json
 
 DATA_DIR = "./data/imagenette2"
 ATTACK_DIR = "./data/attacked"
+ATTACK_CUSTOM_DIR = "./data/attacked_custom"
+ATTACK_PLOT_DIR = "./data/plots"
 DEFENSE_DIRS = "./data/defense/{}"
 
 with open("./data/class_code2name.json") as f:

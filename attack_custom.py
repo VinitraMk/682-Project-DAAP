@@ -8,6 +8,7 @@ import pickle
 from torchvision.io import read_image, write_png
 import matplotlib.pyplot as plt
 import torch.nn.functional as F
+import cv2
 
 import utils
 import config as C
@@ -52,13 +53,33 @@ def apply_patch_random(img_batch, patch, mask, use_cuda):
 
     return img_batch
 
+def get_mask(args):
+    global PATCH_SIZE
+    mask = torch.zeros((1, 3, IMG_SIZE, IMG_SIZE))
+    if args.patch_shape == "square":
+        mask[:, :, :PATCH_SIZE, :PATCH_SIZE] = 1
+    elif args.patch_shape == "circle":
+        PATCH_SIZE = 60
+        for i_ in range(IMG_SIZE):
+            for j_ in range(IMG_SIZE):
+                if (i_ - PATCH_SIZE//2) ** 2 + (j_ - PATCH_SIZE//2) ** 2 < (PATCH_SIZE//2)**2:
+                    mask[:, :, i_, j_] = 1
+
+    elif args.patch_shape == "star":
+        PATCH_SIZE = 60
+        mask = cv2.imread("./patches/mask_star.png")
+        mask = 1.0 * (mask > 127)
+        mask = torch.Tensor(mask)
+        mask = mask.transpose(1, 2).transpose(0, 1)
+        mask = mask.unsqueeze(0)
+
+    return mask
 
 
 
-
-
-def attack_custom_folder(raw_img_folder, target, use_cuda, patch_path, save_dir, args):
-
+def attack_custom_folder(raw_img_folder, target, use_cuda, patch_path, save_dir, plot_dir, args):
+    os.makedirs(plot_dir, exist_ok=True)
+    os.makedirs(os.path.dirname(patch_path), exist_ok=True)
     # target = 291
     batch_size = args.batch_size
     transforms = torchvision.transforms.Compose([
@@ -91,14 +112,7 @@ def attack_custom_folder(raw_img_folder, target, use_cuda, patch_path, save_dir,
     model.eval()
 
     # Initialise patch
-    mask = torch.zeros((1, 3, IMG_SIZE, IMG_SIZE))
-    if args.patch_shape == "square":
-        mask[:, :, :PATCH_SIZE, :PATCH_SIZE] = 1
-    elif args.patch_shape == "circle":
-        for i_ in range(IMG_SIZE):
-            for j_ in range(IMG_SIZE):
-                if (i_ - PATCH_SIZE//2) ** 2 + (j_ - PATCH_SIZE//2) ** 2 < (PATCH_SIZE//2)**2:
-                    mask[:, :, i_, j_] = 1
+    mask = get_mask(args)
 
     patch_img = torch.zeros((1, 3, IMG_SIZE, IMG_SIZE))
     patch_img[:, :, :PATCH_SIZE, :PATCH_SIZE] = torch.rand((3, PATCH_SIZE, PATCH_SIZE))
@@ -108,10 +122,10 @@ def attack_custom_folder(raw_img_folder, target, use_cuda, patch_path, save_dir,
     #     mask = mask.cuda()
     patch_img = torch.nn.Parameter(patch_img)
     patch_img.requires_grad_()
-    patch_optimizer = torch.optim.SGD([patch_img], lr = args.lr, momentum=0.9)
+    patch_optimizer = torch.optim.SGD([patch_img], lr = args.lr, momentum=0.9, nesterov=True)
     lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(
         patch_optimizer,
-        milestones=[30, 50, 80], gamma=0.1
+        milestones=[20, 30, 40], gamma=0.5
     )
 
     model_name2id = {
@@ -129,7 +143,7 @@ def attack_custom_folder(raw_img_folder, target, use_cuda, patch_path, save_dir,
     epoch2loss = []
     epoch2acc = []
     epoch2acc_adv = []
-    num_epochs = 100
+    num_epochs = 50
     pbar_epoch = tqdm.tqdm(total = num_epochs)
     relu_fn = torch.nn.ReLU(inplace=True)
     
@@ -157,7 +171,7 @@ def attack_custom_folder(raw_img_folder, target, use_cuda, patch_path, save_dir,
 
             output = model(img_batch)
             loss = loss_fn(output, adv_label[:img_batch.shape[0]]) 
-            patch_only = patch_img[:, :, :PATCH_SIZE, :PATCH_SIZE]
+            patch_only = (patch_img * mask)[:, :, :PATCH_SIZE, :PATCH_SIZE]
             pos_delta = relu_fn(patch_only - img_max)
             neg_delta = relu_fn(img_min - patch_only)
             # loss += 100 * (
@@ -206,17 +220,17 @@ def attack_custom_folder(raw_img_folder, target, use_cuda, patch_path, save_dir,
         pbar_epoch.update(1)
         pbar_epoch.set_description("Loss: {:.4f} | Model Acc: {} Adv Acc: {}".format(avg_loss, str(acc_meter), str(adv_acc_meter)))
         plt.plot(epoch2loss)
-        plt.savefig("attack_training_loss_lr{}_{}.png".format(args.lr, args.model), dpi=300)
+        plt.savefig(os.path.join(plot_dir, "attack_training_loss.png"), dpi=300)
         plt.close()
         plt.plot(epoch2acc, label="correct accuracy")
         plt.plot(epoch2acc_adv, label="adversarial accuracy")
         plt.legend()
-        plt.savefig("attack_training_acc_lr{}_{}.png".format(args.lr, args.model), dpi=300)
+        plt.savefig(os.path.join(plot_dir, "attack_training_acc.png"), dpi=300)
         plt.close()
     
-    generate_attacked_dataset(raw_img_folder, patch_path, save_dir)
+    generate_attacked_dataset(raw_img_folder, patch_path, save_dir, args)
 
-def generate_attacked_dataset(raw_img_folder, patch_path, save_dir):
+def generate_attacked_dataset(raw_img_folder, patch_path, save_dir, args, zero_out=False):
 
     transforms = torchvision.transforms.Compose([
         torchvision.transforms.Resize((224, 224)),
@@ -236,9 +250,10 @@ def generate_attacked_dataset(raw_img_folder, patch_path, save_dir):
     patch_img = patch_img/255.0
     patch_img = (patch_img - m)/ s
     patch_img = patch_img.unsqueeze(0)
+    if zero_out:
+        patch_img = -(m/s) * torch.ones_like(patch_img)
 
-    mask = torch.zeros((1, 3, IMG_SIZE, IMG_SIZE))
-    mask[:, :, :PATCH_SIZE, :PATCH_SIZE] = 1
+    mask = get_mask(args)
 
     count = 0
     for img, label in tqdm.tqdm(dataset, desc="Attacking"):

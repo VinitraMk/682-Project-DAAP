@@ -28,14 +28,15 @@ def get_model(model_name):
         # print(model)
         # exit()
     elif model_name.lower() == "vgg":
-        weights = torchvision.models.Swin_T_Weights.IMAGENET1K_V1
-        model = torchvision.models.swin_t(weights=weights)
+        weights = torchvision.models.VGG16_Weights.IMAGENET1K_V1
+        model = torchvision.models.vgg16(weights=weights)
         model_id2name = weights.meta["categories"]
-        # gradcam_target = [model.encoder.layers[-1].ln_1]
-        # gradcam_target = [model.encoder.layers[-2]]
-        gradcam_target = [model.features[-1][-1].norm1]
-        # print(model)
-        # exit()
+        gradcam_target = [model.features[-1]]
+    elif model_name.lower() == "inception":
+        weights = torchvision.models.Inception_V3_Weights.IMAGENET1K_V1
+        model = torchvision.models.inception_v3(weights=weights)
+        model_id2name = weights.meta["categories"]
+        gradcam_target = [model.Mixed_7c]
     
     model.eval()
     return model, model_id2name, gradcam_target
