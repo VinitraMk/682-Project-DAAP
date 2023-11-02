@@ -66,7 +66,7 @@ def get_mask(args):
                     mask[:, :, i_, j_] = 1
 
     elif args.patch_shape == "star":
-        PATCH_SIZE = 60
+        PATCH_SIZE = 80
         mask = cv2.imread("./patches/mask_star.png")
         mask = 1.0 * (mask > 127)
         mask = torch.Tensor(mask)
@@ -94,6 +94,8 @@ def attack_custom_folder(raw_img_folder, target, use_cuda, patch_path, save_dir,
     data_classid2name = {
         v:k for k, v in dataset.class_to_idx.items()
     }
+
+    np.random.seed(1)
 
     # class sampledDataset(torch.utils.data.Dataset):
     #     def __init__(self, dataset, rate=10):
