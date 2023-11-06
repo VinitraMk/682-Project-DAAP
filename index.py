@@ -19,6 +19,7 @@ class Index:
 
     def __init__(self):
         self.data_dir = 'data/imagenette2'
+        self.patch_dir = 'patched-images'
         self.train_labels_path = self.data_dir + '/train_images.csv'
         self.val_labels_path = self.data_dir + '/val_images.csv'
 
@@ -26,10 +27,12 @@ class Index:
         # clean up gray scale images from the directory [temporary solution]
         print('program started')
         #cleanup_images(self.data_dir)
+        utils.make_csv(self.data_dir)
         self.build_datasetloader()
         self.initialize_model()
         self.initialize_csv_for_bb()
         self.add_patches_imgs()
+        self.prepare_yolo_data()
         
     def build_datasetloader(self):
         print('building datasets...')
@@ -62,7 +65,7 @@ class Index:
 
     def add_patches_imgs(self):
         print('introduce patches to images..')
-        output_dir = os.path.join(os.getcwd(), 'od_data')
+        output_dir = os.path.join(os.getcwd(), self.patch_dir)
         patch_attack = PatchAttack(self.model,
         self.lbl_le_mapping, output_dir, False)
         print('\nAdding patches to training data\n')
@@ -73,7 +76,6 @@ class Index:
             sample_batch['filename'], 'train')
             if i_batch==0:
               break
-        '''
         print('\nAdding patches to valid data\n')
         for i_batch, sample_batch in enumerate(self.train_dataloader):
             print(f'Adding patches to batch {i_batch}')
@@ -82,7 +84,6 @@ class Index:
             sample_batch['filename'], 'val')
             if i_batch==0:
               break
-        '''
 
     def initialize_csv_for_bb(self):
         df = pd.DataFrame([], columns=['filepath', 'xmin','ymin', 'xmax', 'ymax'])

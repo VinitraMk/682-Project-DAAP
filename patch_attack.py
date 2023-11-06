@@ -42,8 +42,8 @@ class PatchAttack:
           write_png(((batch_img[0])).to(torch.uint8), 'sample_patch_img0.JPEG')
           batch_img[i] = draw_bounding_boxes(image=batch_img[i].to(torch.uint8),
           boxes=box_coord, colors="red")
-          fn = f'{filepaths[i].replace(".JPEG", "")}_patchedimg.JPEG'
-          df_row = [fn] + box_coord.tolist()[0]
+          #fn = f'{filepaths[i].replace(".JPEG", "")}_patchedimg.JPEG'
+          df_row = [1, randx, randy, self.PATCH_SIZE, self.PATCH_SIZE]
           bounding_boxes.append(df_row)
         return batch_img, bounding_boxes
 
@@ -129,30 +129,53 @@ class PatchAttack:
     
     def add_patch_to_img(self, img_batch, lbls, filenames, mode = 'train'):
         #write_png((255 * self.__denormalize(img_batch[0])).to(torch.uint8), 'sample_input_img.JPEG')
-        batch_size = img_batch.size()[0]
+        batch_fs = img_batch.size()[0]
+        unattacked_imglen = int(batch_fs * 0.1)
+        batch_size = batch_fs - unattacked_imglen
+
         self.current_dir = os.path.join(self.output_dir, mode)
+
         mask = self.__generate_mask(batch_size)
-        patch_batch = self.__patch_attack(img_batch, mask, lbls)
+        patch_batch = self.__patch_attack(img_batch[:batch_size], mask, lbls[:batch_size])
         patch_batch_dnorm = 255 * self.__denormalize(patch_batch.data)
-        img_batch_dnorm = 255 * self.__denormalize(img_batch)
+        img_batch_dnorm = 255 * self.__denormalize(img_batch[:batch_size])
         #write_png(patch_batch_dnorm[0].to(torch.uint8), 'sample_patch.JPEG')
         img_batch_res, bounding_boxes = self.__apply_patch_box_on_img(batch_size,
           patch_batch_dnorm, img_batch_dnorm, filenames)
         #write_png((img_batch_res[0]).to(torch.uint8), 'sample_patch_img.JPEG')
 
         # save csv file of bounding boxes
-        bb_df = pd.read_csv(os.path.join(self.output_dir, f'patch_bbs_{mode}.csv'))
-        bb_df = pd.concat([pd.DataFrame(bounding_boxes, columns=bb_df.columns),
-        bb_df], ignore_index=True)
-        bb_df.to_csv(os.path.join(self.output_dir, f'patch_bbs_{mode}.csv'),
-          index = False)
+        #bb_df = pd.read_csv(os.path.join(self.output_dir, f'patch_bbs_{mode}.csv'))
+        #bb_df = pd.concat([pd.DataFrame(bounding_boxes, columns=bb_df.columns),
+        #bb_df], ignore_index=True)
+        #bb_df.to_csv(os.path.join(self.output_dir, f'patch_bbs_{mode}.csv'),
+          #index = False)
 
+        cols = ['label', 'xmin', 'ymin', 'xmax', 'ymax']
         #test patch and save
         for i in range(batch_size):
-          fn = filenames[i]
-          tc = self.lbl_le_mapping[lbls[i].item()]
-          dirpath = os.path.join(self.current_dir, tc)
-          if not(os.path.exists(dirpath)):
-            os.mkdir(dirpath)
-          fn = os.path.join(self.current_dir, f'{filenames[i].replace(".JPEG","")}_patchedimg.JPEG')
-          write_png(img_batch_res[i].to(torch.uint8), os.path.join(dirpath, fn))
+            #for maintaining folder structure of imagenet
+            #tc = self.lbl_le_mapping[lbls[i].item()]
+            #dirpath = os.path.join(self.current_dir, tc)
+            #if not(os.path.exists(dirpath)):
+                #os.mkdir(dirpath)
+
+            fn = f'images/{filenames[i]}'
+            write_png(img_batch_res[i].to(torch.uint8), os.path.join(self.current_dir, fn))
+
+            #save bounding box to txt file
+            df = pd.DataFrame(bounding_boxes[i], columns=cols)
+            fn = f'labels/{filenames[i].replace(".JPEG",".txt")}'
+            df.to_csv(os.path.join(self.current_dir, fn), index = False)
+        
+        img_batch_dnorm = 255 * self.__denormalize(img_batch[batch_size:])
+        for i in range(unattacked_imglen):
+            fn = f'images/{filenames[batch_size + i]}'
+            write_png(img_batch_dnorm[i].to(torch.uint8), os.path.join(self.current_dir, fn))
+            df = pd.DataFrame([0, -1, -1, 0, 0], columns=cols)
+            fn = f'labels/{filenames[batch_size + i].replace(".JPEG",".txt")}'
+            df.to_csv(os.path.join(self.current_dir, fn), index = False)
+        fpaths = [os.path.join(self.current_dir, f'images/{fname}') for fname in filenames]
+        with open(os.path.join(self.current_dir, f'{mode}.txt'), "w") as fp:
+           for fpath in fpaths:
+              fp.write("".join(fpath) + "\n")

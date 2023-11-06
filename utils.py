@@ -43,7 +43,7 @@ def dataloader(train_size, test_size, data_dir, batch_size, num_workers, total_n
 
 def make_csv(data_dir):
     data_dir_abs = os.path.join(os.getcwd(), data_dir)
-    cols = ['filename', 'label']
+    cols = ['filename', 'label', 'filepath']
     train_df = pd.DataFrame([], columns = cols)
     val_df = pd.DataFrame([], columns = cols)
 
@@ -59,7 +59,7 @@ def make_csv(data_dir):
         data = []
         for lbl in labels:
             label_dir = os.path.join(sub_dir_path, lbl)
-            data += [(f'{lbl}/{fname}', le_name_mapping[lbl]) for fname in os.listdir(label_dir)]
+            data += [(fname, le_name_mapping[lbl], f'{lbl}/{fname}') for fname in os.listdir(label_dir)]
         if split == 'train':
             train_df = pd.concat([pd.DataFrame(data, columns = train_df.columns), train_df], ignore_index = True)
         else:
