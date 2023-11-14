@@ -131,10 +131,10 @@ class LangSAM():
 
 @torch.no_grad()
 def foundation_defense(attacked_img_folder, save_folder, args):
-    transforms = utils.ImageDataset([
+    transforms = torchvision.transforms.Compose([
         torchvision.transforms.Resize((224, 224)),
     ])
-    dataset = torchvision.datasets.ImageFolder(
+    dataset = utils.ImageDataset(
         attacked_img_folder,
         transform=transforms
     )

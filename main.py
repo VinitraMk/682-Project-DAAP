@@ -104,7 +104,7 @@ def main():
                     )
                 generate_attacked_dataset(img_folder_val, patch_path, attack_folder_path, args)
                 attacked_acc = check_accuracy(attack_folder_path, args)
-                print("Model {} custom Attacked Accuracy: {}".format(model, attacked_acc))
+                print("Model {} custom-{} Attacked Accuracy: {}".format(model, args.patch_shape, attacked_acc))
 
     elif args.mode == "defense":
         img_folder = os.path.join(C.DATA_DIR, "val")
@@ -135,7 +135,13 @@ def main():
                 else:
                     defense_fn = generate_attacked_dataset
                     fn_args = (img_folder, "./patches/empty.png", defense_folder_path, args, True)
-                
+            elif args.defense_type == "inpaint":
+                masked_folder_path = os.path.join(C.DEFENSE_DIRS.format("foundation"), args.attack_type, args.patch_shape, "val")
+                defense_folder_path = os.path.join(C.DEFENSE_DIRS.format("inpaint"), args.attack_type, args.patch_shape, "val")
+                defense_folder_check_path = defense_folder_path
+                defense_fn = defenses.inpaint_defense
+                fn_args = (masked_folder_path, defense_folder_path, args)
+
             
             defense_fn(*fn_args)
             defended_acc = check_accuracy(defense_folder_check_path, args)
