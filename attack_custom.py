@@ -239,7 +239,7 @@ def generate_attacked_dataset(raw_img_folder, patch_path, save_dir, args, zero_o
         torchvision.transforms.ToTensor(),
         torchvision.transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
     ])
-    dataset = torchvision.datasets.ImageFolder(
+    dataset = utils.ImageDataset(
         raw_img_folder,
         transform=transforms
     )
@@ -258,9 +258,7 @@ def generate_attacked_dataset(raw_img_folder, patch_path, save_dir, args, zero_o
     mask = get_mask(args)
 
     count = 0
-    for img, label in tqdm.tqdm(dataset, desc="Attacking"):
-
-        
+    for img, label, img_name in tqdm.tqdm(dataset, desc="Attacking"):
         
         label = C.CLASS_NAME2ID[data_classid2name[label]]
 
@@ -271,7 +269,6 @@ def generate_attacked_dataset(raw_img_folder, patch_path, save_dir, args, zero_o
         img = 255*unnormalize(img)
 
         os.makedirs(os.path.join(save_dir, str(C.CLASS_ID2NAME[label])), exist_ok=True)
-        write_png(img.to(torch.uint8), os.path.join(save_dir, str(C.CLASS_ID2NAME[label]), "{}.jpg".format(count)))
+        write_png(img.to(torch.uint8), os.path.join(save_dir, str(C.CLASS_ID2NAME[label]), img_name))
 
-        count += 1
     

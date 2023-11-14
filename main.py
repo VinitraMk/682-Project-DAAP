@@ -5,6 +5,7 @@ import tqdm
 import os
 import numpy as np
 from torchvision.io import read_image, write_png
+import random
 
 import utils
 import config as C
@@ -30,7 +31,7 @@ def check_accuracy(image_folder, args, save_folder = None):
         torchvision.transforms.ToTensor(),
         torchvision.transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
     ])
-    dataset = torchvision.datasets.ImageFolder(
+    dataset = utils.ImageDataset(
         image_folder,
         transform=transforms
     )
@@ -43,8 +44,7 @@ def check_accuracy(image_folder, args, save_folder = None):
 
     acc_meter = utils.Accumulator()
     pbar = tqdm.tqdm(total = len(dataset))
-    count = 0
-    for img, label in dataset:
+    for img, label, img_name in dataset:
 
         prediction = model(img.unsqueeze(0)).squeeze(0).softmax(0)
         pred_cls = prediction.argmax().item()
@@ -60,8 +60,7 @@ def check_accuracy(image_folder, args, save_folder = None):
         if save_folder is not None:
             cur_dir = os.path.join(save_folder, label_name)
             os.makedirs(cur_dir, exist_ok=True)
-            write_png((255*unnormalize(img)).to(torch.uint8), os.path.join(cur_dir, "{}.jpg".format(count)))
-            count += 1
+            write_png((255*unnormalize(img)).to(torch.uint8), os.path.join(cur_dir, img_name))
 
     return acc_meter    
 
@@ -69,12 +68,12 @@ def check_accuracy(image_folder, args, save_folder = None):
 
 def main():
     args = get_args()
-    img_folder = os.path.join(C.DATA_DIR, "train")
     supported_models = [
         "resnet18", "inception", "resnet50", #"vit"
     ]
     
     if args.mode == "clean":
+        img_folder = os.path.join(C.DATA_DIR, "val")
         for model in supported_models:
             args.model = model
             attacked_acc = check_accuracy(img_folder, args, save_folder="./data/clean")
@@ -82,50 +81,53 @@ def main():
 
     elif args.mode == "attack":
         if args.attack_type == "im_patch":
-            attack_folder_path = os.path.join(C.ATTACK_DIR, "train")
+            img_folder = os.path.join(C.DATA_DIR, "val")
+            attack_folder_path = os.path.join(C.ATTACK_DIR, "val")
             attack_folder(img_folder, attack_folder_path, args)
             for model in supported_models:
                 args.model = model
                 attacked_acc = check_accuracy(attack_folder_path, args)
                 print("Model {} im_patch Attacked Accuracy: {}".format(model, attacked_acc))
         elif args.attack_type == "custom":
+            img_folder_train = os.path.join(C.DATA_DIR, "train")
+            img_folder_val = os.path.join(C.DATA_DIR, "val")
             for model in supported_models:
                 args.model = model
                 patch_path=os.path.join("./patches/", args.patch_shape, model+".png")
-                attack_folder_path = os.path.join(C.ATTACK_CUSTOM_DIR, args.patch_shape, model, "train")
+                attack_folder_path = os.path.join(C.ATTACK_CUSTOM_DIR, args.patch_shape, model, "val")
                 plot_dir = os.path.join(C.ATTACK_PLOT_DIR, args.patch_shape, model)
                 if not os.path.exists(patch_path):
                     attack_custom_folder(
-                        img_folder, target=291, use_cuda=True, 
+                        img_folder_train, target=291, use_cuda=True, 
                         patch_path=patch_path, 
                         save_dir=attack_folder_path, plot_dir=plot_dir, args=args
                     )
-                else:
-                    generate_attacked_dataset(img_folder, patch_path, attack_folder_path, args)
+                generate_attacked_dataset(img_folder_val, patch_path, attack_folder_path, args)
                 attacked_acc = check_accuracy(attack_folder_path, args)
                 print("Model {} custom Attacked Accuracy: {}".format(model, attacked_acc))
 
     elif args.mode == "defense":
+        img_folder = os.path.join(C.DATA_DIR, "val")
         for model in supported_models:
             args.model = model
             if args.attack_type == "im_patch":
                 args.patch_shape = "square"
-                attack_folder_path = os.path.join(C.ATTACK_DIR, "train")
+                attack_folder_path = os.path.join(C.ATTACK_DIR, "val")
             else:
-                attack_folder_path = os.path.join(C.ATTACK_CUSTOM_DIR, args.patch_shape, model, "train")
+                attack_folder_path = os.path.join(C.ATTACK_CUSTOM_DIR, args.patch_shape, model, "val")
 
             if args.defense_type == "gradcam":
                 defense_fn = defenses.gradcam_defense
-                defense_folder_path = os.path.join(C.DEFENSE_DIRS.format("gradcam"), args.attack_type, args.patch_shape, model, "train")
+                defense_folder_path = os.path.join(C.DEFENSE_DIRS.format("gradcam"), args.attack_type, args.patch_shape, model, "val")
                 defense_folder_check_path = defense_folder_path
                 fn_args = (attack_folder_path, defense_folder_path, args)
             elif args.defense_type == "foundation":
                 defense_fn = defenses.foundation_defense
-                defense_folder_path = os.path.join(C.DEFENSE_DIRS.format("foundation"), args.attack_type, args.patch_shape, "train")
+                defense_folder_path = os.path.join(C.DEFENSE_DIRS.format("foundation"), args.attack_type, args.patch_shape, "val")
                 defense_folder_check_path = os.path.join(defense_folder_path, "image")
                 fn_args = (attack_folder_path, defense_folder_path, args)
             elif args.defense_type == "mask_upper":
-                defense_folder_path = os.path.join(C.DEFENSE_DIRS.format("mask_upper"), args.attack_type, args.patch_shape, "train")
+                defense_folder_path = os.path.join(C.DEFENSE_DIRS.format("mask_upper"), args.attack_type, args.patch_shape, "val")
                 defense_folder_check_path = defense_folder_path
                 if args.attack_type == "im_patch":
                     defense_fn = attack_folder
@@ -184,4 +186,11 @@ def main():
     #     acc = check_accuracy(defense_folder_path, args)
     #     print("Model {} Acc: {}".format(model, acc))
 
-main()
+if __name__ == "__main__":
+    seed = 123
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.backends.cudnn.deterministic = True
+    main()

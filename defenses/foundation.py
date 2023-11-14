@@ -131,7 +131,7 @@ class LangSAM():
 
 @torch.no_grad()
 def foundation_defense(attacked_img_folder, save_folder, args):
-    transforms = torchvision.transforms.Compose([
+    transforms = utils.ImageDataset([
         torchvision.transforms.Resize((224, 224)),
     ])
     dataset = torchvision.datasets.ImageFolder(
@@ -148,11 +148,11 @@ def foundation_defense(attacked_img_folder, save_folder, args):
     to_tensor = torchvision.transforms.ToTensor()
 
     count = 0
-    for img, label in tqdm.tqdm(dataset, desc="Defending"):
+    for img, label, img_name in tqdm.tqdm(dataset, desc="Defending"):
         img_save_dir = os.path.join(save_folder, "image", str(data_classid2name[label]))
         mask_save_dir = os.path.join(save_folder, "mask", str(data_classid2name[label]))
-        img_save_path = os.path.join(img_save_dir, "{}.jpg".format(count))
-        mask_save_path = os.path.join(mask_save_dir, "{}.jpg".format(count))
+        img_save_path = os.path.join(img_save_dir, img_name)
+        mask_save_path = os.path.join(mask_save_dir, img_name)
 
         if os.path.exists(img_save_path) and os.path.exists(mask_save_path):
             count += 1

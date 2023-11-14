@@ -15,7 +15,7 @@ import utils
 import config as C
 
 def gradcam_defense(attacked_img_folder, save_folder, args, filter_mode="none"):
-    dataset = torchvision.datasets.ImageFolder(
+    dataset = utils.ImageDataset(
         attacked_img_folder
     )
     data_classid2name = {
@@ -41,7 +41,7 @@ def gradcam_defense(attacked_img_folder, save_folder, args, filter_mode="none"):
 
     count = 0
     to_tensor = torchvision.transforms.ToTensor()
-    for img, label in tqdm.tqdm(dataset, desc="Defending"):
+    for img, label, img_name in tqdm.tqdm(dataset, desc="Defending"):
 
         if filter_mode == "gt":
             prediction = model(transforms(img).unsqueeze(0)).squeeze(0).softmax(0)
@@ -80,6 +80,6 @@ def gradcam_defense(attacked_img_folder, save_folder, args, filter_mode="none"):
             else:
                 img = 255*to_tensor(img)
         os.makedirs(os.path.join(save_folder, str(data_classid2name[label])), exist_ok=True)
-        write_png(img.to(torch.uint8), os.path.join(save_folder, str(data_classid2name[label]), "{}.jpg".format(count)))
+        write_png(img.to(torch.uint8), os.path.join(save_folder, str(data_classid2name[label]), img_name))
 
         count += 1
