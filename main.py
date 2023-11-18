@@ -17,6 +17,7 @@ def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('--mode', type=str, default="attack")
     parser.add_argument('--attack_type', type=str, default="custom")
+    parser.add_argument('--attack_on', type=str, default="val")
     parser.add_argument('--defense_type', type=str, default="foundation")
     parser.add_argument('--model', type=str, default="resnet50")
     parser.add_argument('--lr', type=float, default=5.0)
@@ -80,31 +81,45 @@ def main():
             print("Model {} Clean Accuracy: {}".format(model, attacked_acc))
 
     elif args.mode == "attack":
+
         if args.attack_type == "im_patch":
-            img_folder = os.path.join(C.DATA_DIR, "val")
-            attack_folder_path = os.path.join(C.ATTACK_DIR, "val")
-            attack_folder(img_folder, attack_folder_path, args)
-            for model in supported_models:
-                args.model = model
-                attacked_acc = check_accuracy(attack_folder_path, args)
-                print("Model {} im_patch Attacked Accuracy: {}".format(model, attacked_acc))
+            img_folder = os.path.join(C.DATA_DIR, args.attack_on)
+            if args.attack_on == "train":
+                attack_folder_path = os.path.join(C.ATTACK_DIR, "train", "image")
+                attack_mask_folder_path = os.path.join(C.ATTACK_DIR, "train", "mask")
+            else:
+                attack_folder_path = os.path.join(C.ATTACK_DIR, "val")
+                attack_mask_folder_path = None
+            attack_folder(img_folder, attack_folder_path, attack_mask_folder_path, args)
+            if args.attack_on == "val":
+                for model in supported_models:
+                    args.model = model
+                    attacked_acc = check_accuracy(attack_folder_path, args)
+                    print("Model {} im_patch Attacked Accuracy: {}".format(model, attacked_acc))
         elif args.attack_type == "custom":
+            img_folder = os.path.join(C.DATA_DIR, args.attack_on)
             img_folder_train = os.path.join(C.DATA_DIR, "train")
-            img_folder_val = os.path.join(C.DATA_DIR, "val")
             for model in supported_models:
                 args.model = model
                 patch_path=os.path.join("./patches/", args.patch_shape, model+".png")
-                attack_folder_path = os.path.join(C.ATTACK_CUSTOM_DIR, args.patch_shape, model, "val")
+                if args.attack_on == "train":
+                    attack_folder_path = os.path.join(C.ATTACK_CUSTOM_DIR, args.patch_shape, model, "train", "image")
+                    attack_mask_folder_path = os.path.join(C.ATTACK_CUSTOM_DIR, args.patch_shape, model, "train", "mask")
+                else:
+                    attack_folder_path = os.path.join(C.ATTACK_CUSTOM_DIR, args.patch_shape, model, "val")
+                    attack_mask_folder_path = None
                 plot_dir = os.path.join(C.ATTACK_PLOT_DIR, args.patch_shape, model)
                 if not os.path.exists(patch_path):
                     attack_custom_folder(
                         img_folder_train, target=291, use_cuda=True, 
                         patch_path=patch_path, 
-                        save_dir=attack_folder_path, plot_dir=plot_dir, args=args
+                        save_dir=attack_folder_path, save_mask_dir=attack_mask_folder_path,
+                        plot_dir=plot_dir, args=args
                     )
-                generate_attacked_dataset(img_folder_val, patch_path, attack_folder_path, args)
-                attacked_acc = check_accuracy(attack_folder_path, args)
-                print("Model {} custom-{} Attacked Accuracy: {}".format(model, args.patch_shape, attacked_acc))
+                generate_attacked_dataset(img_folder, patch_path, attack_folder_path, attack_mask_folder_path, args)
+                if args.attack_on == "val":
+                    attacked_acc = check_accuracy(attack_folder_path, args)
+                    print("Model {} custom-{} Attacked Accuracy: {}".format(model, args.patch_shape, attacked_acc))
 
     elif args.mode == "defense":
         img_folder = os.path.join(C.DATA_DIR, "val")
@@ -141,6 +156,24 @@ def main():
                 defense_folder_check_path = defense_folder_path
                 defense_fn = defenses.inpaint_defense
                 fn_args = (masked_folder_path, defense_folder_path, args)
+            elif args.defense_type == "unet":
+                if args.attack_type == "im_patch":
+                    checkpoint_dir = os.path.join(C.UNET_CHECKPOINT, args.attack_type)
+                    train_dir = os.path.join(C.ATTACK_DIR, "train")
+                    defense_folder_path = os.path.join(C.DEFENSE_DIRS.format("unet"), args.attack_type, "val")
+                else:
+                    checkpoint_dir = os.path.join(C.UNET_CHECKPOINT, args.attack_type, args.patch_shape, model)
+                    train_dir = os.path.join(C.ATTACK_CUSTOM_DIR, args.patch_shape, model, "train")
+                    defense_folder_path = os.path.join(C.DEFENSE_DIRS.format("unet"), args.attack_type, args.patch_shape, model, "val")
+                if not os.path.exists(checkpoint_dir):
+                    defenses.train_unet_patch(
+                        train_dir, checkpoint_dir, 
+                        use_cuda=True, args=args
+                    )
+
+                defense_folder_check_path = os.path.join(defense_folder_path, "image")
+                defense_fn = defenses.unet_defense
+                fn_args = (checkpoint_dir, attack_folder_path, defense_folder_path, args)
 
             
             defense_fn(*fn_args)

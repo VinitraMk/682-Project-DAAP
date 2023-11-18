@@ -81,4 +81,4 @@ class ApplyPatch(torch.nn.Module):
         patch, mask = self.transforms(self._patch, self._mask)
         inv_mask = torch.zeros_like(mask)
         inv_mask[mask == 0] = 1
-        return img * inv_mask + patch * mask
+        return img * inv_mask + patch * mask, mask

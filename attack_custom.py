@@ -51,7 +51,7 @@ def apply_patch_random(img_batch, patch, mask, use_cuda):
 
     img_batch = img_batch * (1 - mask_tr) + patch_tr * mask_tr
 
-    return img_batch
+    return img_batch, mask_tr
 
 def get_mask(args):
     global PATCH_SIZE
@@ -77,7 +77,7 @@ def get_mask(args):
 
 
 
-def attack_custom_folder(raw_img_folder, target, use_cuda, patch_path, save_dir, plot_dir, args):
+def attack_custom_folder(raw_img_folder, target, use_cuda, patch_path, save_dir, save_mask_dir, plot_dir, args):
     os.makedirs(plot_dir, exist_ok=True)
     os.makedirs(os.path.dirname(patch_path), exist_ok=True)
     # target = 291
@@ -166,7 +166,7 @@ def attack_custom_folder(raw_img_folder, target, use_cuda, patch_path, save_dir,
             # img_max, img_min = 0.8*img_batch.data.max(), 0.8*img_batch.data.min()
             # print(patch_img.max(), patch_img.min())
             
-            img_batch = apply_patch_random(img_batch, patch_img, mask, use_cuda)
+            img_batch, _ = apply_patch_random(img_batch, patch_img, mask, use_cuda)
 
             if use_cuda:
                 img_batch = img_batch.cuda()
@@ -230,9 +230,9 @@ def attack_custom_folder(raw_img_folder, target, use_cuda, patch_path, save_dir,
         plt.savefig(os.path.join(plot_dir, "attack_training_acc.png"), dpi=300)
         plt.close()
     
-    generate_attacked_dataset(raw_img_folder, patch_path, save_dir, args)
+    generate_attacked_dataset(raw_img_folder, patch_path, save_dir, save_mask_dir, args)
 
-def generate_attacked_dataset(raw_img_folder, patch_path, save_dir, args, zero_out=False):
+def generate_attacked_dataset(raw_img_folder, patch_path, save_dir, save_mask_dir, args, zero_out=False):
 
     transforms = torchvision.transforms.Compose([
         torchvision.transforms.Resize((224, 224)),
@@ -263,12 +263,17 @@ def generate_attacked_dataset(raw_img_folder, patch_path, save_dir, args, zero_o
         label = C.CLASS_NAME2ID[data_classid2name[label]]
 
         img_batch = img.unsqueeze(0)
-        img_batch = apply_patch_random(img_batch, patch_img, mask, use_cuda=False)
+        img_batch, mask_tr = apply_patch_random(img_batch, patch_img, mask, use_cuda=False)
         img = img_batch.squeeze(0)
+        mask_tr = mask_tr.squeeze(0)
 
         img = 255*unnormalize(img)
 
         os.makedirs(os.path.join(save_dir, str(C.CLASS_ID2NAME[label])), exist_ok=True)
         write_png(img.to(torch.uint8), os.path.join(save_dir, str(C.CLASS_ID2NAME[label]), img_name))
+
+        if save_mask_dir is not None:
+            os.makedirs(os.path.join(save_mask_dir, str(C.CLASS_ID2NAME[label])), exist_ok=True)
+            write_png(255*mask_tr.to(torch.uint8), os.path.join(save_mask_dir, str(C.CLASS_ID2NAME[label]), img_name))
 
     

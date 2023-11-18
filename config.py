@@ -5,6 +5,7 @@ ATTACK_DIR = "./data/attacked"
 ATTACK_CUSTOM_DIR = "./data/attacked_custom"
 ATTACK_PLOT_DIR = "./data/plots"
 DEFENSE_DIRS = "./data/defense/{}"
+UNET_CHECKPOINT = "./data/checkpoints/UNet"
 
 with open("./data/class_code2name.json") as f:
     CLASS_CODE2NAME = json.load(f)

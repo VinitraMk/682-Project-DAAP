@@ -17,7 +17,7 @@ def unnormalize(img):
     s = s.unsqueeze(1).unsqueeze(1)
     return img * s + m
 
-def attack_folder(raw_img_folder, save_folder, args, zero_out=False):
+def attack_folder(raw_img_folder, save_folder, save_mask_folder, args, zero_out=False):
     with gzip.open("data/imagenet_patch.gz", 'rb') as f:
         patches, targets, class_dict = pickle.load(f)
     dataset = utils.ImageDataset(
@@ -41,14 +41,18 @@ def attack_folder(raw_img_folder, save_folder, args, zero_out=False):
             torchvision.transforms.Resize((224, 224)),
             torchvision.transforms.ToTensor(),
             apply_patch,
-            torchvision.transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
         ])
         label = C.CLASS_NAME2ID[data_classid2name[label]]
 
-        img = transforms(img)
-        img = 255*unnormalize(img)
+        img, mask = transforms(img)
+
+        img = 255*img
 
         os.makedirs(os.path.join(save_folder, str(C.CLASS_ID2NAME[label])), exist_ok=True)
         write_png(img.to(torch.uint8), os.path.join(save_folder, str(C.CLASS_ID2NAME[label]), img_name))
+
+        if save_mask_folder is not None:
+            os.makedirs(os.path.join(save_mask_folder, str(C.CLASS_ID2NAME[label])), exist_ok=True)
+            write_png(255*mask.to(torch.uint8), os.path.join(save_mask_folder, str(C.CLASS_ID2NAME[label]), img_name))
 
 
