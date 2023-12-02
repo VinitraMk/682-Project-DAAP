@@ -67,3 +67,8 @@ def make_csv(data_dir):
         train_df.to_csv(os.path.join(data_dir_abs, 'train_images.csv'), index = False)
         val_df.to_csv(os.path.join(data_dir_abs, 'val_images.csv'), index = False)
     return lbl_le_mapping
+
+def imshow(img, transforms=None, figsize=(10, 20)):
+    npimg = _tensor_to_show(img, transforms)
+    plt.figure(figsize=figsize)
+    plt.imshow(npimg, interpolation=None)

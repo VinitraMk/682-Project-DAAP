@@ -34,17 +34,17 @@ class PatchAttack:
     def __apply_patch_box_on_img(self, batch_size, patch_batch, batch_img, filepaths):
         bounding_boxes = []
         for i in range(batch_size):
-          randx = torch.randint(low=0, high=self.INPUT_SIZE - self.PATCH_SIZE, size=(1,)).item()
-          randy = torch.randint(low=0, high=self.INPUT_SIZE - self.PATCH_SIZE, size=(1,)).item()
-          xmax, ymax = randx + self.PATCH_SIZE, randy + self.PATCH_SIZE
-          box_coord = torch.Tensor([[randx, randy, xmax, ymax]])
-          batch_img[i, :, randy: ymax, randx: xmax] = (255 * self.__denormalize(patch_batch[i, :, :self.PATCH_SIZE, :self.PATCH_SIZE].data))
-          write_png(((batch_img[0])).to(torch.uint8), 'sample_patch_img0.JPEG')
-          batch_img[i] = draw_bounding_boxes(image=batch_img[i].to(torch.uint8),
-          boxes=box_coord, colors="red")
-          #fn = f'{filepaths[i].replace(".JPEG", "")}_patchedimg.JPEG'
-          df_row = [1, randx, randy, self.PATCH_SIZE, self.PATCH_SIZE]
-          bounding_boxes.append(df_row)
+            randx = torch.randint(low=0, high=self.INPUT_SIZE - self.PATCH_SIZE, size=(1,)).item()
+            randy = torch.randint(low=0, high=self.INPUT_SIZE - self.PATCH_SIZE, size=(1,)).item()
+            xmax, ymax = randx + self.PATCH_SIZE, randy + self.PATCH_SIZE
+            box_coord = torch.Tensor([[randx, randy, xmax, ymax]])
+            batch_img[i, :, randy: ymax, randx: xmax] = (255 * self.__denormalize(patch_batch[i, :, :self.PATCH_SIZE, :self.PATCH_SIZE].data))
+            write_png(((batch_img[0])).to(torch.uint8), 'sample_patch_img0.JPEG')
+            batch_img[i] = draw_bounding_boxes(image=batch_img[i].to(torch.uint8),
+            boxes=box_coord, colors="red")
+            #fn = f'{filepaths[i].replace(".JPEG", "")}_patchedimg.JPEG'
+            df_row = [1, randx, randy, self.PATCH_SIZE, self.PATCH_SIZE]
+            bounding_boxes.append(df_row)
         return batch_img, bounding_boxes
 
     def __apply_patch_on_batch(self, patch_batch, batch_size, minthresh, maxthresh):
@@ -127,7 +127,8 @@ class PatchAttack:
         '''
         return mask
     
-    def add_patch_to_img(self, img_batch, lbls, filenames, mode = 'train'):
+    def add_patch_to_img(self, img_batch, lbls, filenames,
+    mode = 'train'):
         #write_png((255 * self.__denormalize(img_batch[0])).to(torch.uint8), 'sample_input_img.JPEG')
         batch_fs = img_batch.size()[0]
         unattacked_imglen = int(batch_fs * 0.1)
@@ -164,18 +165,20 @@ class PatchAttack:
             write_png(img_batch_res[i].to(torch.uint8), os.path.join(self.current_dir, fn))
 
             #save bounding box to txt file
-            df = pd.DataFrame(bounding_boxes[i], columns=cols)
+            df = pd.DataFrame([bounding_boxes[i]], columns=cols)
             fn = f'labels/{filenames[i].replace(".JPEG",".txt")}'
-            df.to_csv(os.path.join(self.current_dir, fn), index = False)
+            df.to_csv(os.path.join(self.current_dir, fn), index = False,
+            header = False)
         
         img_batch_dnorm = 255 * self.__denormalize(img_batch[batch_size:])
         for i in range(unattacked_imglen):
             fn = f'images/{filenames[batch_size + i]}'
             write_png(img_batch_dnorm[i].to(torch.uint8), os.path.join(self.current_dir, fn))
-            df = pd.DataFrame([0, -1, -1, 0, 0], columns=cols)
+            df = pd.DataFrame([[0, -1, -1, 0, 0]], columns=cols)
             fn = f'labels/{filenames[batch_size + i].replace(".JPEG",".txt")}'
-            df.to_csv(os.path.join(self.current_dir, fn), index = False)
+            df.to_csv(os.path.join(self.current_dir, fn), index = False,
+            header = False)
         fpaths = [os.path.join(self.current_dir, f'images/{fname}') for fname in filenames]
-        with open(os.path.join(self.current_dir, f'{mode}.txt'), "w") as fp:
+        with open(os.path.join(self.output_dir, f'{mode}.txt'), "a+") as fp:
            for fpath in fpaths:
               fp.write("".join(fpath) + "\n")
