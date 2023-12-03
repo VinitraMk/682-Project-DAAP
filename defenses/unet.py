@@ -223,11 +223,14 @@ def train_unet_patch(train_attacked_folder, model_save_dir, use_cuda, args):
 
 
 def unet_defense(model_save_dir, attacked_img_folder, save_folder, args):
+    use_cuda = True
     unet = ResnetUnet()
     unet.load_state_dict(
         torch.load(os.path.join(model_save_dir, "model.ckpt"))
     )
     unet.eval()
+    if use_cuda:
+        unet = unet.cuda()
 
     transforms = torchvision.transforms.Compose([
         torchvision.transforms.Resize((224, 224)),
@@ -250,9 +253,14 @@ def unet_defense(model_save_dir, attacked_img_folder, save_folder, args):
         if os.path.exists(img_save_path) and os.path.exists(mask_save_path):
             continue
 
+
         with torch.no_grad():
-            patch_pred = unet(normalize(img).unsqueeze(0))
+            if use_cuda:
+                img_input = normalize(img).cuda().unsqueeze(0)
+            patch_pred = unet(img_input)
             patch_pred = patch_pred.squeeze(0)
+            if use_cuda:
+                patch_pred = patch_pred.cpu()
 
         img_def = (1 - patch_pred) * img
         # print(patch_pred.shape, img.shape, img_def.shape)

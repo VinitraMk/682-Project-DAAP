@@ -12,6 +12,7 @@ import config as C
 from attack import attack_folder
 from attack_custom import attack_custom_folder, generate_attacked_dataset, unnormalize
 import defenses
+import explanations
 
 def get_args():
     parser = argparse.ArgumentParser()
@@ -71,6 +72,9 @@ def main():
     args = get_args()
     supported_models = [
         "resnet18", "inception", "resnet50", #"vit"
+    ]
+    supported_shapes = [
+        "square", "circle", "star"
     ]
     
     if args.mode == "clean":
@@ -138,7 +142,7 @@ def main():
                 fn_args = (attack_folder_path, defense_folder_path, args)
             elif args.defense_type == "foundation":
                 defense_fn = defenses.foundation_defense
-                defense_folder_path = os.path.join(C.DEFENSE_DIRS.format("foundation"), args.attack_type, args.patch_shape, "val")
+                defense_folder_path = os.path.join(C.DEFENSE_DIRS.format("foundation"), args.attack_type, args.patch_shape, model, "val")
                 defense_folder_check_path = os.path.join(defense_folder_path, "image")
                 fn_args = (attack_folder_path, defense_folder_path, args)
             elif args.defense_type == "mask_upper":
@@ -150,9 +154,19 @@ def main():
                 else:
                     defense_fn = generate_attacked_dataset
                     fn_args = (img_folder, "./patches/empty.png", defense_folder_path, args, True)
-            elif args.defense_type == "inpaint":
-                masked_folder_path = os.path.join(C.DEFENSE_DIRS.format("foundation"), args.attack_type, args.patch_shape, "val")
-                defense_folder_path = os.path.join(C.DEFENSE_DIRS.format("inpaint"), args.attack_type, args.patch_shape, "val")
+            elif args.defense_type == "sam-inpaint":
+                masked_folder_path = os.path.join(C.DEFENSE_DIRS.format("foundation"), args.attack_type, args.patch_shape, model, "val")
+                defense_folder_path = os.path.join(C.DEFENSE_DIRS.format("inpaint"), args.attack_type, args.patch_shape, model, "val")
+                defense_folder_check_path = defense_folder_path
+                defense_fn = defenses.inpaint_defense
+                fn_args = (masked_folder_path, defense_folder_path, args)
+            elif args.defense_type == "unet-inpaint":
+                if args.attack_type == "im_patch":
+                    masked_folder_path = os.path.join(C.DEFENSE_DIRS.format("unet"), args.attack_type, "val")
+                    defense_folder_path = os.path.join(C.DEFENSE_DIRS.format("unet-inpaint"), args.attack_type, "val")
+                else:
+                    masked_folder_path = os.path.join(C.DEFENSE_DIRS.format("unet"), args.attack_type, args.patch_shape, model, "val")
+                    defense_folder_path = os.path.join(C.DEFENSE_DIRS.format("unet-inpaint"), args.attack_type, args.patch_shape, model, "val")
                 defense_folder_check_path = defense_folder_path
                 defense_fn = defenses.inpaint_defense
                 fn_args = (masked_folder_path, defense_folder_path, args)
@@ -180,50 +194,135 @@ def main():
             defended_acc = check_accuracy(defense_folder_check_path, args)
             print("Model {} Attacked {}-{} {} defense Accuracy: {}".format(model, args.attack_type, args.patch_shape, args.defense_type, defended_acc))
 
+    elif "cross" in args.mode:
+        # cross model
+        if "model" in args.mode:
+            for shape in supported_shapes:
+                for model1 in supported_models:
+                    for model2 in supported_models:
+                        args.model = model2
+                        checkpoint_dir = os.path.join(C.UNET_CHECKPOINT, "custom", shape, model1)
+                        attack_folder_path = os.path.join(C.ATTACK_CUSTOM_DIR, shape, model2, "val")
+                        defense_folder_path = os.path.join(C.DEFENSE_DIRS.format("cross-unet"), "{}->{}".format(model1, model2), shape, "val")
+                        
+                        defense_folder_check_path = os.path.join(defense_folder_path, "image")
+                    
+                        defenses.unet_defense(checkpoint_dir, attack_folder_path, defense_folder_path, args)
+                        defended_acc = check_accuracy(defense_folder_check_path, args)
+
+                        print("Cross-model {} {} -> {}: Defended Acc: {}".format(shape, model1, model2, defended_acc))
+
+
+        # cross shape
+        if "shape" in args.mode:
+            for model in supported_models:
+                for shape1 in supported_shapes:
+                    for shape2 in supported_shapes:
+                        args.model = model
+                        checkpoint_dir = os.path.join(C.UNET_CHECKPOINT, "custom", shape1, model)
+                        attack_folder_path = os.path.join(C.ATTACK_CUSTOM_DIR, shape2, model, "val")
+                        defense_folder_path = os.path.join(C.DEFENSE_DIRS.format("cross-unet"), "{}->{}".format(shape1, shape2), model, "val")
+                        
+                        defense_folder_check_path = os.path.join(defense_folder_path, "image")
+                    
+                        defenses.unet_defense(checkpoint_dir, attack_folder_path, defense_folder_path, args)
+                        defended_acc = check_accuracy(defense_folder_check_path, args)
+
+                        print("Cross-shape {} {} -> {}: Defended Acc: {}".format(model, shape1, shape2, defended_acc))
+
+
+        # ImageNet -> custom square
+        # custom square -> ImageNet
+        if "attack" in args.mode:
+            for model in supported_models:
+                args.model = model
+                for shape in supported_shapes:
+                    checkpoint_dir = os.path.join(C.UNET_CHECKPOINT, "im_patch")
+                    attack_folder_path = os.path.join(C.ATTACK_CUSTOM_DIR, shape, model, "val")
+                    defense_folder_path = os.path.join(C.DEFENSE_DIRS.format("cross-unet"), "img_path->custom", shape, model, "val")
+                    defense_folder_check_path = os.path.join(defense_folder_path, "image")
+
+                    defenses.unet_defense(checkpoint_dir, attack_folder_path, defense_folder_path, args)
+                    defended_acc = check_accuracy(defense_folder_check_path, args)
+                    print("Cross-attack {} {} img_path -> custom: Defended Acc: {}".format(shape, model, defended_acc))
+                    
+                    
+                    
+                    checkpoint_dir = os.path.join(C.UNET_CHECKPOINT, "custom", shape, model)
+                    attack_folder_path = os.path.join(C.ATTACK_DIR, "val")
+                    defense_folder_path = os.path.join(C.DEFENSE_DIRS.format("cross-unet"), "custom->img_path", shape, model, "val")
+                    defense_folder_check_path = os.path.join(defense_folder_path, "image")
+                    
+                    defenses.unet_defense(checkpoint_dir, attack_folder_path, defense_folder_path, args)
+                    defended_acc = check_accuracy(defense_folder_check_path, args)
+                    print("Cross-attack {} {} custom -> img_path: Defended Acc: {}".format(shape, model, defended_acc))
+                    
 
 
 
+    elif args.mode == "explanation":
+        # explanations.sam_corrupt_image(mult=0)
+        # explanations.sam_corrupt_image(mult=0.2)
+        # explanations.sam_corrupt_image(mult=0.5)
+        # explanations.sam_corrupt_image(mult=0.8)
+        # explanations.sam_corrupt_image(mult=1)
 
-        
-    # defenses.gradcam_defense(attack_folder_path, defense_folder_path, args)
-    # defended_acc = check_accuracy(defense_folder_path, args)
-    # print("Defense acc:", defended_acc)
+        # explanations.sam_smooth_image(smooth_num=1)
+        # explanations.sam_smooth_image(smooth_num=2)
+        # explanations.sam_smooth_image(smooth_num=3)
+        # explanations.sam_smooth_image(smooth_num=4)
+        # explanations.sam_smooth_image(smooth_num=5)
 
-    # 
-    # generate_attacked_dataset(img_folder, patch_path="patch_lr{}_{}.png".format(args.lr, args.model), save_dir=attack_custom_folder_path)
-    # attacked_acc = check_accuracy(attack_custom_folder_path, args)
-    # print("Attacked accuracy = ", attacked_acc)
+        # explanations.save_sam_pred(
+        #     "./explanations/sample_images/inpaint.png",
+        #     "./explanations/sample_images/inpaint_defend.png",
+        # )
+        # explanations.save_sam_pred(
+        #     "./explanations/sample_images/defend.png",
+        #     "./explanations/sample_images/defend_defend.png",
+        # )
 
-    # attacked_acc = check_accuracy(attack_custom_folder_path, args)
-    # def_folder = os.path.join(C.DEFENSE_DIRS.format("gradcam_im_patch_swin"), "train")
-    # defenses.gradcam_defense(attack_folder_path, def_folder, args)
-    # acc = check_accuracy(def_folder, args)
-    # print("ViT im-patch gradcam defense: ", acc)
-    # defenses.gradcam_defense(attack_custom_folder_path, defense_custom_folder_path, args)
-    # acc = check_accuracy(defense_custom_folder_path, args)
-    # print("ViT custom-patch gradcam defense: ", acc)
+        # for prompt in [
+        #     "adversarial", "patch", "counterfeit", "corruption", "unnatural", "out of distribution", "not dog"
+        # ]:
+        # for prompt in [
+        #     # "stain", "edit", "fake", "novel", "spurious", "deceptive"
+        #     "perturbation", "unknown"
+        # ]:
+        #     explanations.save_sam_pred(
+        #         "./explanations/sample_images/attacked.png",
+        #         "./explanations/sample_images/defend_prompt__{}__.png".format(prompt.replace(" ", "_")),
+        #         text_prompt=prompt,
+        #     )
 
+        # explanations.save_sam_pred(
+        #     "./explanations/sample_images/beach_astro.jpeg",
+        #     "./explanations/sample_images/beach_astro_defend.png",
+        #     "edit",
+        # )
+        # explanations.save_sam_pred(
+        #     "./explanations/sample_images/beach_astro.jpeg",
+        #     "./explanations/sample_images/beach_astro_defend__edit__.png",
+        #     "edit",
+        # )
 
-    # defense_custom_folder_path = os.path.join(C.DEFENSE_DIRS.format("foundation_im_patch"), "train", "image")
-    # # defenses.foundation_defense(attack_folder_path, defense_custom_folder_path, args)
-    # for model in ["resnet18", "resnet50", "vit"]:
-    #     args.model = model
-    #     acc = check_accuracy(defense_custom_folder_path, args)
-    #     print("Model {} Acc: {}".format(model, acc))
+        # explanations.save_sam_pred(
+        #     "./explanations/sample_images/dalle_asstronaut.jpg",
+        #     "./explanations/sample_images/dalle_asstronaut_defend.png",
+        #     "edit",
+        # )
+        # explanations.save_sam_pred(
+        #     "./explanations/sample_images/dalle_asstronaut.jpg",
+        #     "./explanations/sample_images/dalle_asstronaut_defend__edit__.png",
+        #     "edit",
+        # )
 
-    # defense_folder_path = os.path.join(C.DEFENSE_DIRS.format("mask_upper_imagenet_patch"), "train")
-    # attack_folder(img_folder, defense_folder_path, args, zero_out=True)
-    # for model in ["resnet18", "resnet50", "vit"]:
-    #     args.model = model
-    #     acc = check_accuracy(defense_folder_path, args)
-    #     print("Model {} Acc: {}".format(model, acc))
-
-    # defense_folder_path = os.path.join(C.DEFENSE_DIRS.format("mask_upper"), "train")
-    # generate_attacked_dataset(img_folder, patch_path="patch_empty.png".format(args.lr, args.model), save_dir=defense_folder_path)
-    # for model in ["resnet18", "resnet50", "vit"]:
-    #     args.model = model
-    #     acc = check_accuracy(defense_folder_path, args)
-    #     print("Model {} Acc: {}".format(model, acc))
+        for model in supported_models:
+            for shape in supported_shapes:
+                explanations.unet_feature_invert(
+                    model_save_dir = os.path.join(C.UNET_CHECKPOINT, "custom", shape, model),
+                    save_dir = "./explanations/unet_feature_inversion/custom/{}/{}".format(shape, model),
+                )
 
 if __name__ == "__main__":
     seed = 123
