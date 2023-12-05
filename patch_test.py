@@ -8,7 +8,7 @@ from torchvision.transforms import Compose, Resize, CenterCrop, ToTensor, \
     Normalize
 import torchvision.models as models
 
-from utils.visualization import imshow
+from utils import imshow
 from utils.utils import set_all_seed
 from utils.utils import target_transforms
 

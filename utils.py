@@ -6,6 +6,7 @@ import torchvision
 import torchvision.transforms as transforms
 from torch.utils.data import DataLoader
 from torch.utils.data.sampler import SubsetRandomSampler
+from torchvision.transforms import Normalize
 import os
 import pandas as pd
 from sklearn import preprocessing
@@ -68,7 +69,6 @@ def make_csv(data_dir):
         val_df.to_csv(os.path.join(data_dir_abs, 'val_images.csv'), index = False)
     return lbl_le_mapping
 
-def imshow(img, transforms=None, figsize=(10, 20)):
-    npimg = _tensor_to_show(img, transforms)
-    plt.figure(figsize=figsize)
-    plt.imshow(npimg, interpolation=None)
+def get_reduced_class_transforms():
+    __imagenette_classes = [701, 482, 491, 497, 217, 566, 569, 571, 574, 0]
+    return __imagenette_classes

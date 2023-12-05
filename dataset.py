@@ -24,10 +24,10 @@ class ImageNetDataset(Dataset):
     def __getitem__(self, idx):
         if torch.is_tensor(idx):
             idx = idx.tolist()
-        img_name = os.path.join(self.data_dir, self.image_labels.iloc[idx, 0])
+        img_name = os.path.join(self.data_dir, self.image_labels.iloc[idx, 2])
         image = io.imread(img_name)
         label = self.image_labels.iloc[idx, 1]
-        sample = { 'image': image, 'label': label, 'oglbl': self.lbl_mapping[label], 'filename': self.image_labels.iloc[idx, 0] }
+        sample = { 'image': image, 'label': label, 'oglbl': self.lbl_mapping[label], 'filename': self.image_labels.iloc[idx, 2] }
         if self.transform:
             sample = self.transform(sample)
         return sample
