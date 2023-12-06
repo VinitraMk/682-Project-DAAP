@@ -1,6 +1,6 @@
 # starter code goes here
 from utils import utils
-from cleanup import cleanup_images
+from utils.cleanup import cleanup_images
 from patch_attack import PatchAttack
 from models.resnet18 import Resnet18
 from transforms.transforms import Rescale, ToTensor, CenterCrop, Normalize
