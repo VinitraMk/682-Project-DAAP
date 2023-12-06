@@ -1,6 +1,6 @@
 # starter code goes here
 from utils import utils
-from utils.cleanup import cleanup_images
+from cleanup import cleanup_images
 from patch_attack import PatchAttack
 from models.resnet18 import Resnet18
 from transforms.transforms import Rescale, ToTensor, CenterCrop, Normalize
@@ -20,7 +20,8 @@ from torchvision.datasets import ImageFolder
 from torch.utils.data import DataLoader
 import argparse
 from torchvision.utils import save_image
-
+import random
+import numpy as np
 
 class Index:
     data_dir = ''
@@ -33,7 +34,7 @@ class Index:
 
     def __init__(self):
         self.data_dir = 'data/imagenette2'
-        self.patch_dir = 'patched-images'
+        self.patch_dir = 'attacked-images'
         self.output_dir = 'output'
         self.train_labels_path = self.data_dir + '/train_images.csv'
         self.val_labels_path = self.data_dir + '/val_images.csv'
@@ -112,8 +113,9 @@ class Index:
         with gzip.open(os.path.join(os.getcwd(), "data/imagenet_patch.gz"), "rb") as f:
              imagenet_patch = pickle.load(f)
 
+        patch_idx = torch.randint(0, len(patches), (1,))[0].item()
         patches, targets, info = imagenet_patch
-        patch = patches[0]
+        patch = patches[patch_idx]
 
         apply_patch = PatchAttack(self.model, 'output', patch,
                                  (0.3, 0.3),
@@ -227,6 +229,7 @@ class Index:
         model_path = os.path.join(os.getcwd(), f'models/retrained-classifiers/{self.model_name}.pt')
         model_chkpoint = torch.load(model_path)
         self.model.load_state_dict(model_chkpoint['model_state_dict'])
+        self.model.eval()
     
     def initialize_csv_for_bb(self):
         df = pd.DataFrame([], columns=['filepath', 'xmin','ymin', 'xmax', 'ymax'])
@@ -236,6 +239,13 @@ class Index:
 
 
 if __name__ == "__main__":
+
+    seed = 123
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.backends.cudnn.deterministic = True
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--attack_shape', default='square')
