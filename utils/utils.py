@@ -6,11 +6,12 @@ import torchvision
 import torchvision.transforms as transforms
 from torch.utils.data import DataLoader
 from torch.utils.data.sampler import SubsetRandomSampler
-from torchvision.transforms import Normalize
+from torchvision.transforms import Compose, Normalize
 import os
 import pandas as pd
 from sklearn import preprocessing
 from skimage import io
+from transforms.transforms import Rescale, CenterCrop, ToTensor
 
 # Load the datasets
 # We randomly sample some images from the dataset, because ImageNet itself is too large.
@@ -68,6 +69,30 @@ def make_csv(data_dir):
         train_df.to_csv(os.path.join(data_dir_abs, 'train_images.csv'), index = False)
         val_df.to_csv(os.path.join(data_dir_abs, 'val_images.csv'), index = False)
     return lbl_le_mapping
+
+def get_normalizer():
+    normalizer = Normalize(mean=[0.485, 0.456, 0.406],std=[0.229, 0.224, 0.225])
+    return normalizer
+
+def get_inv_normalizer():
+    inv_normalize = transforms.Normalize(
+        mean=[-0.485/0.229, -0.456/0.224, -0.406/0.255],
+        std=[1/0.229, 1/0.224, 1/0.255]
+    )
+    return inv_normalize
+
+def get_imagenette_transforms(rescale_size = 256, crop_size = 224):
+    data_transforms = transforms.Compose([
+            Rescale(256),
+            ToTensor(),
+            CenterCrop(224)])
+    '''
+    data_transforms = transforms.Compose([
+            Resize(rescale_size),
+            ToTensor(),
+            CenterCrop(crop_size)])
+            '''
+    return data_transforms
 
 def get_reduced_class_transforms():
     __imagenette_classes = [701, 482, 491, 497, 217, 566, 569, 571, 574, 0]

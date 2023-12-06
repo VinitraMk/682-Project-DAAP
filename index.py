@@ -20,6 +20,7 @@ import argparse
 from torchvision.utils import save_image
 import random
 import numpy as np
+import matplotlib.pyplot as plt
 
 class Index:
     data_dir = ''
@@ -58,7 +59,7 @@ class Index:
         self.initialize_model(self.model_name)
         self.retrain_classifier()
         #self.load_model()
-        self.add_patches_to_imgs()
+        #self.add_patches_to_imgs()
         #self.save_model()
         #self.start_defence(defence_type) 
 
@@ -77,6 +78,8 @@ class Index:
                                                 data_dir = os.path.join(self.data_dir, 'val'),
                                                 transform=self.data_transforms,
                                                 lbl_mapping=self.lbl_le_mapping)
+        self.val_len = len(imagenette_val_dataset)
+        self.train_len = len(imagenette_train_dataset)
         print('\nLength of train dataset: ',len(imagenette_train_dataset))
         print('Length of val dataset: ',len(imagenette_val_dataset), '\n')
         self.train_dataloader = DataLoader(imagenette_train_dataset, batch_size=batch_size,
@@ -86,6 +89,7 @@ class Index:
 
     def initialize_model(self, model_name = 'resnet18'):
         self.loss_criterion = torch.nn.CrossEntropyLoss()
+        self.loss = torch.tensor(0.0, requires_grad=True)
 
         self.model_name = model_name
         if model_name == 'resnet18':
@@ -98,10 +102,10 @@ class Index:
         unnormalized_imgs = self.unnormalizer(imgs)
         for i in range(len(unnormalized_imgs)):
             img = unnormalized_imgs[i].cpu()#.transpose(1, 2, 0)
-            test_dir = os.path.join(os.getcwd(), 'test-attacked-images')
-            save_image(img, os.path.join(test_dir, 'sample.JPEG'))
-            #output_dir = os.path.join(os.getcwd(), f'attacked-images/{mode}')
-            #save_image(img, os.path.join(output_dir, f"{filenames[i]}"))
+            #test_dir = os.path.join(os.getcwd(), 'test-attacked-images')
+            #save_image(img, os.path.join(test_dir, 'sample.JPEG'))
+            output_dir = os.path.join(os.getcwd(), f'attacked-images/{mode}')
+            save_image(img, os.path.join(output_dir, f"{filenames[i]}"))
 
     def __insert_patch_on_batch(self, img_batch, lbls, filenames, target_df, mode = 'train'):
         filepath = os.path.join(os.getcwd(), f'attacked-images/{mode}/{mode}_results.csv')
@@ -139,6 +143,14 @@ class Index:
         pdx = pd.concat([target_df, pdx], ignore_index = True)
         pdx.to_csv(filepath)
 
+    def __plot_loss_history(self, loss_history, filename):
+        plt.plot(loss_history, len(loss_history))
+        plt.xlabel('Epochs')
+        plt.ylabel('Loss')
+        plt.title('Loss history')
+        plt.savefig(f'{filename}.png')
+        plt.clf()
+
     def add_patches_to_imgs(self):
         print('\nAttack images')
         self.model.eval()
@@ -159,20 +171,40 @@ class Index:
         output_dir = os.path.join(os.getcwd(), self.patch_dir)
         self.model = self.model.double()
         self.model.train()
+        loss_history = []
         for i in range(2):
             print(f"Running epoch {i}")
+            running_loss = 0.0
             for i_batch, sample_batch in enumerate(self.train_dataloader):
                 self.optimizer.zero_grad()
                 imgs = sample_batch['image'].to(self.device).double()
                 lbls = sample_batch['label'].to(self.device)
                 output = self.model(imgs)
+                #pred_lbls = torch.argmax(output, dim=1).float()
                 loss = self.loss_criterion(output, lbls)
+                running_loss += loss.item()
                 loss.backward()
                 self.optimizer.step()
-                lbls.cpu().detach()
-                imgs.cpu().detach()
+            running_loss /= len(self.train_dataloader)
+            loss_history.append(running_loss)
 
-        self.save_model()
+        self.model.eval()
+        self.model.cpu().detach()
+        running_loss = 0.0
+        for i_batch, sample_batch in enumerate(self.val_dataloader):
+                imgs = sample_batch['image'].double()
+                lbls = sample_batch['label']
+                output = self.model(imgs)
+                class_preds = torch.argmax(output, dim=1)
+                running_loss += self.loss_criterion(output, lbls).item()
+                print(class_preds.size(), lbls.size())
+                acc += (class_preds == lbls).sum()
+                print(acc)
+        acc /= len(self.val_len)
+        running_loss /= len(self.val_dataloader)
+        print('Accuracy of the trained model: ', acc)
+        self.__plot_loss_history(loss_history)
+        self.save_model(acc, running_loss)
 
     def start_defence(self, defence_type = 'sign-indp'):
         print(defence_type)
@@ -215,11 +247,13 @@ class Index:
                     fpath = os.path.join(patch_path, line)
                     fp.write("".join(fpath) + "\n")
 
-    def save_model(self):
+    def save_model(self, acc, loss):
         print("\nSaving model")
         model_path = os.path.join(os.getcwd(), f'models/retrained-classifiers/{self.model_name}.pt')
         torch.save({
             'model_state_dict': self.model.state_dict(),
+            'acc': acc,
+            'val_loss': loss
         }, model_path)
 
     def load_model(self):
