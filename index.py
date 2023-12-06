@@ -1,13 +1,13 @@
 # starter code goes here
 from utils import utils
-from cleanup import cleanup_images
-from patch_attack import PatchAttack
+from utils.cleanup import cleanup_images
+from attack.patch_attack import PatchAttack
 from models.resnet18 import Resnet18
 from defence.signature_indp import SignatureIndp
 
 import os
 import torch
-from dataset import ImageNetDataset
+from datautils.dataset import ImageNetDataset
 from torchvision import transforms as tvtransforms
 from torch.utils.data import DataLoader
 import pandas as pd
@@ -59,7 +59,7 @@ class Index:
         self.initialize_model(self.model_name)
         self.retrain_classifier()
         #self.load_model()
-        self.add_patches_to_imgs()
+        #self.add_patches_to_imgs()
         #self.start_defence(defence_type) 
 
         
@@ -82,9 +82,9 @@ class Index:
         print('\nLength of train dataset: ',len(imagenette_train_dataset))
         print('Length of val dataset: ',len(imagenette_val_dataset), '\n')
         self.train_dataloader = DataLoader(imagenette_train_dataset, batch_size=batch_size,
-                                shuffle=True, num_workers=0)
+                                shuffle=True, num_workers=2)
         self.val_dataloader = DataLoader(imagenette_val_dataset, batch_size=batch_size,
-                                shuffle=True, num_workers=0)
+                                shuffle=True, num_workers=2)
 
     def initialize_model(self, model_name = 'resnet18'):
         self.loss_criterion = torch.nn.CrossEntropyLoss()
@@ -140,7 +140,7 @@ class Index:
         pdx.to_csv(filepath)
 
     def __plot_loss_history(self, loss_history, filename):
-        plt.plot(loss_history, len(loss_history))
+        plt.plot(len(loss_history), loss_history)
         plt.xlabel('Epochs')
         plt.ylabel('Loss')
         plt.title('Loss history')
@@ -168,7 +168,7 @@ class Index:
         self.model = self.model.double()
         self.model.train()
         loss_history = []
-        for i in range(1):
+        for i in range(2):
             print(f"Running epoch {i}")
             running_loss = 0.0
             for i_batch, sample_batch in enumerate(self.train_dataloader):
