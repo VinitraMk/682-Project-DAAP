@@ -3,7 +3,6 @@ from utils import utils
 from cleanup import cleanup_images
 from patch_attack import PatchAttack
 from models.resnet18 import Resnet18
-from transforms.transforms import Rescale, ToTensor, CenterCrop, Normalize
 from defence.signature_indp import SignatureIndp
 
 import os
@@ -14,10 +13,9 @@ from torch.utils.data import DataLoader
 import pandas as pd
 import gzip
 import pickle
-from torchvision.transforms import Compose, Resize, CenterCrop as tvCenterDrop, ToTensor as tvToTensor, \
-    Normalize as tvNormalize
 from torchvision.datasets import ImageFolder
 from torch.utils.data import DataLoader
+from torchvision.transforms import Compose
 import argparse
 from torchvision.utils import save_image
 import random
@@ -29,8 +27,8 @@ class Index:
     train_labels_path = ''
     lbl_le_mapping = {}
     model = None
-    normalizer = tvNormalize(mean=[0.485, 0.456, 0.406],std=[0.229, 0.224, 0.225])
     model_name = 'resnet18'
+    columns = ['Filename', 'True Label', 'Clean Prediction', 'Attacked Prediction', 'xmin', 'ymin', 'xmax', 'ymax']
 
     def __init__(self):
         self.data_dir = 'data/imagenette2'
@@ -38,20 +36,28 @@ class Index:
         self.output_dir = 'output'
         self.train_labels_path = self.data_dir + '/train_images.csv'
         self.val_labels_path = self.data_dir + '/val_images.csv'
+        self.train_df = pd.DataFrame([], columns = self.columns)
+        self.val_df = pd.DataFrame([], columns=self.columns)
         if torch.cuda.is_available():
             self.device = "cuda"
         else:
             self.device = "cpu"
+
+    def initialize_transforms(self, rescale_size = 256, crop_size = 224):
+        self.normalizer = utils.get_normalizer()
+        self.unnormalizer = utils.get_inv_normalizer()
+        self.data_transforms = utils.get_imagenette_transforms()
 
     def start_program(self, defence_type = 'sign-indp'):
         # clean up gray scale images from the directory [temporary solution]
         print('program started')
         #cleanup_images(self.data_dir)
         #utils.make_csv(self.data_dir)
+        self.initialize_transforms()
         self.build_datasetloader()
         self.initialize_model(self.model_name)
-        #self.retrain_classifier()
-        self.load_model()
+        self.retrain_classifier()
+        #self.load_model()
         self.add_patches_to_imgs()
         #self.save_model()
         #self.start_defence(defence_type) 
@@ -61,73 +67,62 @@ class Index:
         print('building datasets...')
         self.lbl_le_mapping = utils.make_csv(self.data_dir)
 
-        data_transforms = tvtransforms.Compose([
-            Rescale(256),
-            ToTensor(),
-            CenterCrop(224)])
-
         batch_size = 128
 
         imagenette_train_dataset = ImageNetDataset(labels_path = self.train_labels_path,
                                                 data_dir = os.path.join(self.data_dir, 'train'),
-                                                transform=data_transforms,
+                                                transform=self.data_transforms,
                                                 lbl_mapping=self.lbl_le_mapping)
         imagenette_val_dataset =  ImageNetDataset(labels_path = self.val_labels_path,
                                                 data_dir = os.path.join(self.data_dir, 'val'),
-                                                transform=data_transforms,
+                                                transform=self.data_transforms,
                                                 lbl_mapping=self.lbl_le_mapping)
         print('\nLength of train dataset: ',len(imagenette_train_dataset))
         print('Length of val dataset: ',len(imagenette_val_dataset), '\n')
         self.train_dataloader = DataLoader(imagenette_train_dataset, batch_size=batch_size,
-                                shuffle=False, num_workers=0)
+                                shuffle=True, num_workers=0)
         self.val_dataloader = DataLoader(imagenette_val_dataset, batch_size=batch_size,
-                                shuffle=False, num_workers=0)
+                                shuffle=True, num_workers=0)
 
     def initialize_model(self, model_name = 'resnet18'):
         self.loss_criterion = torch.nn.CrossEntropyLoss()
-        
 
         self.model_name = model_name
         if model_name == 'resnet18':
             self.model = Resnet18()
             self.model.train()
-        self.optimizer = torch.optim.SGD(self.model.parameters(), lr = 0.01, momentum=0.9)
+        self.optimizer = torch.optim.SGD(self.model.parameters(), lr = 0.001, momentum=0.9)
         self.model.to(self.device)
 
     def __save_attacked_images(self, imgs, filenames, mode = 'train'):
-        for i in range(len(imgs)):
-            img = imgs[i].cpu()#.transpose(1, 2, 0)
-            output_dir = os.path.join(os.getcwd(), f'attacked-images/{mode}')
-            save_image(img, os.path.join(output_dir, f"{filenames[i]}"))
+        unnormalized_imgs = self.unnormalizer(imgs)
+        for i in range(len(unnormalized_imgs)):
+            img = unnormalized_imgs[i].cpu()#.transpose(1, 2, 0)
+            test_dir = os.path.join(os.getcwd(), 'test-attacked-images')
+            save_image(img, os.path.join(test_dir, 'sample.JPEG'))
+            #output_dir = os.path.join(os.getcwd(), f'attacked-images/{mode}')
+            #save_image(img, os.path.join(output_dir, f"{filenames[i]}"))
 
-    def __insert_patch_on_batch(self, img_batch, lbls, filenames, mode = 'train'):
+    def __insert_patch_on_batch(self, img_batch, lbls, filenames, target_df, mode = 'train'):
         filepath = os.path.join(os.getcwd(), f'attacked-images/{mode}/{mode}_results.csv')
-        if os.path.exists(filepath):
-            df = pd.read_csv(filepath)
-        else:
-            df = pd.DataFrame({'Filenames': [], 'True Label': [], 'Clean Predictions': [], 'Attacked Predictions': []})
-            df.to_csv(filepath)
         with open(os.path.join(os.getcwd(), "data/class_id2name.json")) as f:
            target_to_classname = eval(f.read())
 
         with gzip.open(os.path.join(os.getcwd(), "data/imagenet_patch.gz"), "rb") as f:
              imagenet_patch = pickle.load(f)
 
-        patch_idx = torch.randint(0, len(patches), (1,))[0].item()
         patches, targets, info = imagenet_patch
+        patch_idx = torch.randint(0, len(patches), (1,))[0].item()
         patch = patches[patch_idx]
 
-        apply_patch = PatchAttack(self.model, 'output', patch,
-                                 (0.3, 0.3),
-                                 80,
-                                 (0.7, 1.5), info['patch_size'])
+        apply_patch = PatchAttack(self.model, 'output', patch)
 
-        normalizer = tvNormalize(mean=[0.485, 0.456, 0.406],std=[0.229, 0.224, 0.225])
-        patch_normalizer = Compose([apply_patch, normalizer])
+        patch_normalizer = Compose([apply_patch, self.normalizer])
 
         img_batch.to(self.device)
-        x_clean = normalizer(img_batch).to(self.device)
-        x_attacked = patch_normalizer(img_batch).to(self.device)
+        x_clean = self.normalizer(img_batch).to(self.device)
+        x_attacked, bb_idx = apply_patch(img_batch)
+        x_attacked = self.normalizer(x_attacked).to(self.device)
         img_batch.cpu().detach()
         self.__save_attacked_images(x_attacked, filenames, mode)
         self.model.double()
@@ -137,9 +132,12 @@ class Index:
         preds_attacked =  torch.argmax(op_attacked, dim=1, keepdims=True).cpu().detach().numpy()
         x_clean.cpu().detach()
         x_attacked.cpu().detach()
-        pdx = pd.DataFrame({'Filenames': filenames, 'True Label': lbls, 'Clean Predictions': preds_clean[:, 0], 'Attacked Predictions': preds_attacked[:, 0]})
-        pdx = pd.concat([df, pdx], axis=0, ignore_index = True)
-        pdx.to_csv(os.path.join(os.getcwd(), filepath))
+        pd_data = []
+        for fn,y,cpred,apred,coords in zip(filenames, lbls, preds_clean, preds_attacked, bb_idx):
+            pd_data.append([fn, y.item(), cpred[0], apred[0], coords[0].item(), coords[1].item(), coords[2].item(), coords[3].item()])
+        pdx = pd.DataFrame(pd_data, columns=self.columns)
+        pdx = pd.concat([target_df, pdx], ignore_index = True)
+        pdx.to_csv(filepath)
 
     def add_patches_to_imgs(self):
         print('\nAttack images')
@@ -148,20 +146,20 @@ class Index:
             print(f'\tAdding patches to train batch {i_batch}')
             self.__insert_patch_on_batch(sample_batch['image'],
             sample_batch['label'],
-            sample_batch['filename'], 'train')
+            sample_batch['filename'], self.train_df, 'train')
 
         for i_batch, sample_batch in enumerate(self.val_dataloader):
             print(f'\tAdding patches to val batch {i_batch}')
             self.__insert_patch_on_batch(sample_batch['image'],
             sample_batch['label'],
-            sample_batch['filename'], 'val')
+            sample_batch['filename'], self.train_df, 'val')
 
     def retrain_classifier(self):
         print('Retraining classifier on 10 classes')
         output_dir = os.path.join(os.getcwd(), self.patch_dir)
         self.model = self.model.double()
         self.model.train()
-        for i in range(10):
+        for i in range(2):
             print(f"Running epoch {i}")
             for i_batch, sample_batch in enumerate(self.train_dataloader):
                 self.optimizer.zero_grad()
