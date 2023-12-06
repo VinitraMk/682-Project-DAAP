@@ -8,6 +8,7 @@ from defence.signature_indp import SignatureIndp
 import os
 import torch
 from datautils.dataset import ImageNetDataset
+from datautils.dataloader import get_dataloader
 from torchvision import transforms as tvtransforms
 from torch.utils.data import DataLoader
 import pandas as pd
@@ -21,6 +22,8 @@ from torchvision.utils import save_image
 import random
 import numpy as np
 import matplotlib.pyplot as plt
+import shutil
+from torchvision.utils import draw_bounding_boxes
 
 class Index:
     data_dir = ''
@@ -49,17 +52,41 @@ class Index:
         self.unnormalizer = utils.get_inv_normalizer()
         self.data_transforms = utils.get_imagenette_transforms()
 
+    def clear_outputdirs(self):
+        print("Reset output directories")
+        data_dirs = ['English_springer', 'French_horn', 'cassette_player', 'chain_saw', 'church', 'garbage_truck', 'gas_pump', 'golf_ball', 'parachute', 'tench']
+        target_dir = os.path.join(os.getcwd(), f"{self.patch_dir}/train")
+        shutil.rmtree(target_dir)
+        os.mkdir(target_dir)
+        for folder in data_dirs:
+            fpath = os.path.join(target_dir, folder)
+            os.mkdir(fpath)
+        target_dir = os.path.join(os.getcwd(), f"{self.patch_dir}/val")
+        shutil.rmtree(target_dir)
+        os.mkdir(target_dir)
+        for folder in data_dirs:
+            fpath = os.path.join(target_dir, folder)
+            os.mkdir(fpath)
+
+    def check_accuracy(self):
+        clean_acc = (self.val_df['Clean Prediction'] == self.val_df['True Label']).mean()
+        attack_acc = (self.val_df['Attacked Prediction'] == self.val_df['True Label']).mean()
+        print('\nClean image accuracy: ', clean_acc)
+        print('Attacked image accuracy: ', attack_acc)
+
     def start_program(self, defence_type = 'sign-indp'):
         # clean up gray scale images from the directory [temporary solution]
         print('program started')
         #cleanup_images(self.data_dir)
         #utils.make_csv(self.data_dir)
+        self.clear_outputdirs()
         self.initialize_transforms()
         self.build_datasetloader()
         self.initialize_model(self.model_name)
-        self.retrain_classifier()
-        #self.load_model()
-        #self.add_patches_to_imgs()
+        #self.retrain_classifier()
+        self.load_model()
+        self.add_patches_to_imgs()
+        self.check_accuracy()
         #self.start_defence(defence_type) 
 
         
@@ -77,14 +104,9 @@ class Index:
                                                 data_dir = os.path.join(self.data_dir, 'val'),
                                                 transform=self.data_transforms,
                                                 lbl_mapping=self.lbl_le_mapping)
-        self.val_len = len(imagenette_val_dataset)
-        self.train_len = len(imagenette_train_dataset)
-        print('\nLength of train dataset: ',len(imagenette_train_dataset))
-        print('Length of val dataset: ',len(imagenette_val_dataset), '\n')
-        self.train_dataloader = DataLoader(imagenette_train_dataset, batch_size=batch_size,
-                                shuffle=True, num_workers=2)
-        self.val_dataloader = DataLoader(imagenette_val_dataset, batch_size=batch_size,
-                                shuffle=True, num_workers=2)
+        self.train_dataloader, self.val_dataloader, self.train_len, self.val_len = get_dataloader(imagenette_train_dataset, imagenette_val_dataset, 512, True)
+        print('\nLength of train dataset: ', self.train_len)
+        print('Length of val dataset: ', self.val_len, '\n')
 
     def initialize_model(self, model_name = 'resnet18'):
         self.loss_criterion = torch.nn.CrossEntropyLoss()
@@ -96,6 +118,14 @@ class Index:
         self.model = self.model.double()
         self.optimizer = torch.optim.SGD(self.model.parameters(), lr = 0.001, momentum=0.9)
         self.model.to(self.device)
+    
+    def __draw_bounding_box(self, attacked_img_batch, box_coord):
+        for i in range(attacked_img_batch.size()[0]):
+            boxes = torch.tensor([[box_coord[i][1], box_coord[i][0], box_coord[i][3], box_coord[i][2]]])
+            attacked_img_batch[i] = draw_bounding_boxes(image=(255 * attacked_img_batch[i]).to(torch.uint8),
+                boxes=boxes, colors="red")
+            attacked_img_batch[i] /= 255
+        return attacked_img_batch
 
     def __save_attacked_images(self, imgs, filenames, mode = 'train'):
         unnormalized_imgs = self.unnormalizer(imgs)
@@ -124,6 +154,7 @@ class Index:
 
         x_clean = self.normalizer(img_batch).to(self.device)
         x_attacked, bb_idx = apply_patch(img_batch)
+        x_attacked = self.__draw_bounding_box(x_attacked, bb_idx)
         x_attacked = self.normalizer(x_attacked).to(self.device)
         self.__save_attacked_images(x_attacked, filenames, mode)
         op_clean = self.model(x_clean.double())
@@ -136,11 +167,12 @@ class Index:
         for fn,y,cpred,apred,coords in zip(filenames, lbls, preds_clean, preds_attacked, bb_idx):
             pd_data.append([fn, y.item(), cpred[0], apred[0], coords[0].item(), coords[1].item(), coords[2].item(), coords[3].item()])
         pdx = pd.DataFrame(pd_data, columns=self.columns)
-        pdx = pd.concat([target_df, pdx], ignore_index = True)
-        pdx.to_csv(filepath)
+        target_df = pd.concat([target_df, pdx], ignore_index = True)
+        target_df.to_csv(filepath)
+        return target_df
 
     def __plot_loss_history(self, loss_history, filename):
-        plt.plot(len(loss_history), loss_history)
+        plt.plot(list(range(len(loss_history))), loss_history)
         plt.xlabel('Epochs')
         plt.ylabel('Loss')
         plt.title('Loss history')
@@ -152,13 +184,13 @@ class Index:
         self.model.eval()
         for i_batch, sample_batch in enumerate(self.train_dataloader):
             print(f'\tAdding patches to train batch {i_batch}')
-            self.__insert_patch_on_batch(sample_batch['image'],
+            self.train_df = self.__insert_patch_on_batch(sample_batch['image'],
             sample_batch['label'],
             sample_batch['filename'], self.train_df, 'train')
 
         for i_batch, sample_batch in enumerate(self.val_dataloader):
             print(f'\tAdding patches to val batch {i_batch}')
-            self.__insert_patch_on_batch(sample_batch['image'],
+            self.val_df = self.__insert_patch_on_batch(sample_batch['image'],
             sample_batch['label'],
             sample_batch['filename'], self.val_df, 'val')
 
@@ -200,7 +232,7 @@ class Index:
             del lbls
         acc /= self.val_len
         running_loss /= len(self.val_dataloader)
-        print('Accuracy of the trained model: ', acc)
+        print('\nAccuracy of the trained model: ', acc.item())
         print('Loss of the trained model: ', running_loss)
         self.save_model(acc, running_loss)
 
@@ -283,3 +315,4 @@ if __name__ == "__main__":
     args = parser.parse_args()
     index = Index()
     index.start_program(args.defence_type)
+    
