@@ -59,8 +59,7 @@ class Index:
         self.initialize_model(self.model_name)
         self.retrain_classifier()
         #self.load_model()
-        #self.add_patches_to_imgs()
-        #self.save_model()
+        self.add_patches_to_imgs()
         #self.start_defence(defence_type) 
 
         
@@ -68,7 +67,7 @@ class Index:
         print('building datasets...')
         self.lbl_le_mapping = utils.make_csv(self.data_dir)
 
-        batch_size = 128
+        batch_size = 64
 
         imagenette_train_dataset = ImageNetDataset(labels_path = self.train_labels_path,
                                                 data_dir = os.path.join(self.data_dir, 'train'),
@@ -94,7 +93,7 @@ class Index:
         self.model_name = model_name
         if model_name == 'resnet18':
             self.model = Resnet18()
-            self.model.train()
+        self.model = self.model.double()
         self.optimizer = torch.optim.SGD(self.model.parameters(), lr = 0.001, momentum=0.9)
         self.model.to(self.device)
 
@@ -123,19 +122,16 @@ class Index:
 
         patch_normalizer = Compose([apply_patch, self.normalizer])
 
-        img_batch.to(self.device)
         x_clean = self.normalizer(img_batch).to(self.device)
         x_attacked, bb_idx = apply_patch(img_batch)
         x_attacked = self.normalizer(x_attacked).to(self.device)
-        img_batch.cpu().detach()
         self.__save_attacked_images(x_attacked, filenames, mode)
-        self.model.double()
         op_clean = self.model(x_clean.double())
-        preds_clean = torch.argmax(op_clean, dim=1, keepdims=True).cpu().detach().numpy()
+        preds_clean = torch.argmax(op_clean, dim=1, keepdims=True).cpu().numpy()
         op_attacked = self.model(x_attacked.double())
-        preds_attacked =  torch.argmax(op_attacked, dim=1, keepdims=True).cpu().detach().numpy()
-        x_clean.cpu().detach()
-        x_attacked.cpu().detach()
+        preds_attacked =  torch.argmax(op_attacked, dim=1, keepdims=True).cpu().numpy()
+        x_clean.cpu()
+        x_attacked.cpu()
         pd_data = []
         for fn,y,cpred,apred,coords in zip(filenames, lbls, preds_clean, preds_attacked, bb_idx):
             pd_data.append([fn, y.item(), cpred[0], apred[0], coords[0].item(), coords[1].item(), coords[2].item(), coords[3].item()])
@@ -164,7 +160,7 @@ class Index:
             print(f'\tAdding patches to val batch {i_batch}')
             self.__insert_patch_on_batch(sample_batch['image'],
             sample_batch['label'],
-            sample_batch['filename'], self.train_df, 'val')
+            sample_batch['filename'], self.val_df, 'val')
 
     def retrain_classifier(self):
         print('Retraining classifier on 10 classes')
@@ -172,38 +168,40 @@ class Index:
         self.model = self.model.double()
         self.model.train()
         loss_history = []
-        for i in range(2):
+        for i in range(1):
             print(f"Running epoch {i}")
             running_loss = 0.0
             for i_batch, sample_batch in enumerate(self.train_dataloader):
                 self.optimizer.zero_grad()
-                imgs = sample_batch['image'].to(self.device).double()
+                imgs = self.normalizer(sample_batch['image']).to(self.device).double()
                 lbls = sample_batch['label'].to(self.device)
                 output = self.model(imgs)
-                #pred_lbls = torch.argmax(output, dim=1).float()
                 loss = self.loss_criterion(output, lbls)
-                running_loss += loss.item()
                 loss.backward()
+                running_loss += loss.detach().item()
                 self.optimizer.step()
+                del imgs
+                del lbls
             running_loss /= len(self.train_dataloader)
             loss_history.append(running_loss)
-
+        
+        self.__plot_loss_history(loss_history, 'train_loss_history')
         self.model.eval()
-        self.model.cpu().detach()
         running_loss = 0.0
+        acc = 0.0
         for i_batch, sample_batch in enumerate(self.val_dataloader):
-                imgs = sample_batch['image'].double()
-                lbls = sample_batch['label']
-                output = self.model(imgs)
-                class_preds = torch.argmax(output, dim=1)
-                running_loss += self.loss_criterion(output, lbls).item()
-                print(class_preds.size(), lbls.size())
-                acc += (class_preds == lbls).sum()
-                print(acc)
-        acc /= len(self.val_len)
+            imgs = self.normalizer(sample_batch['image']).to(self.device).double()
+            lbls = sample_batch['label'].to(self.device)
+            output = self.model(imgs)
+            class_preds = torch.argmax(output, dim=1)
+            running_loss += self.loss_criterion(output, lbls).item()
+            acc += (class_preds == lbls).sum()
+            del imgs
+            del lbls
+        acc /= self.val_len
         running_loss /= len(self.val_dataloader)
         print('Accuracy of the trained model: ', acc)
-        self.__plot_loss_history(loss_history)
+        print('Loss of the trained model: ', running_loss)
         self.save_model(acc, running_loss)
 
     def start_defence(self, defence_type = 'sign-indp'):
