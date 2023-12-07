@@ -9,3 +9,5 @@ data/**/*.txt
 **/__pycache__/**
 *.tgz
 *.zip
+
+models/backup

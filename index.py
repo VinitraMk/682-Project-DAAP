@@ -3,7 +3,11 @@ from utils import utils
 from utils.cleanup import cleanup_images
 from attack.patch_attack import PatchAttack
 from models.resnet18 import Resnet18
+from models.resnet50 import Resnet50
+from models.inceptionv3 import InceptionV3
 from defence.signature_indp import SignatureIndp
+from defence.yolo_mask import YOLOMask
+
 
 import os
 import torch
@@ -32,9 +36,9 @@ class Index:
     lbl_le_mapping = {}
     model = None
     model_name = 'resnet18'
-    columns = ['Filename', 'True Label', 'Clean Prediction', 'Attacked Prediction', 'xmin', 'ymin', 'xmax', 'ymax']
+    columns = ['Filename', 'true-label', 'clean-prediction', 'attacked-prediction', 'defence-prediction', 'xmin', 'ymin', 'xmax', 'ymax']
 
-    def __init__(self):
+    def __init__(self, model_name):
         self.data_dir = 'data/imagenette2'
         self.patch_dir = 'data/attacked-images'
         self.output_dir = 'output'
@@ -42,6 +46,7 @@ class Index:
         self.val_labels_path = self.data_dir + '/val_images.csv'
         self.train_df = pd.DataFrame([], columns = self.columns)
         self.val_df = pd.DataFrame([], columns=self.columns)
+        self.model_name = model_name
         if torch.cuda.is_available():
             self.device = "cuda"
         else:
@@ -50,7 +55,7 @@ class Index:
     def initialize_transforms(self, rescale_size = 256, crop_size = 224):
         self.normalizer = utils.get_normalizer()
         self.unnormalizer = utils.get_inv_normalizer()
-        self.data_transforms = utils.get_imagenette_transforms()
+        self.data_transforms = utils.get_imagenette_transforms(rescale_size, crop_size)
 
     def clear_outputdirs(self):
         print("Reset output directories")
@@ -68,26 +73,33 @@ class Index:
             fpath = os.path.join(target_dir, folder)
             os.mkdir(fpath)
 
-    def check_accuracy(self):
-        clean_acc = (self.val_df['Clean Prediction'] == self.val_df['True Label']).mean()
-        attack_acc = (self.val_df['Attacked Prediction'] == self.val_df['True Label']).mean()
-        print('\nClean image accuracy: ', clean_acc)
-        print('Attacked image accuracy: ', attack_acc)
+    def check_accuracy(self, df, test_len):
+        clean_sum = (df['clean-prediction'] == df['true-label']).sum()
+        attack_sum = (df['attacked-prediction'] == df['true-label']).sum()
+        defence_sum = (df['defence-prediction'] == df['true-label']).sum()
+        print('\nClean image accuracy: ', clean_sum / test_len)
+        print('Attacked image accuracy: ', attack_sum / test_len)
+        print('Defence image accuracy: ', defence_sum / test_len)
 
-    def start_program(self, defence_type = 'sign-indp'):
+    def start_program(self, rescale_size = 256, crop_size = 224,
+        operation = 'train-classifier', defence_type = 'sign-indp',
+        test_dir = 'yolov5/runs/detect/exp2/labels', epochs = 2):
         # clean up gray scale images from the directory [temporary solution]
-        print('program started')
+        print('program started for operation', operation)
         #cleanup_images(self.data_dir)
         #utils.make_csv(self.data_dir)
-        #self.clear_outputdirs()
-        self.initialize_transforms()
+        self.initialize_transforms(rescale_size, crop_size)
         self.build_datasetloader()
         self.initialize_model(self.model_name)
-        #self.retrain_classifier()
-        self.load_model()
-        self.add_patches_to_imgs()
-        self.check_accuracy()
-        #self.start_defence(defence_type) 
+        if operation == 'train-classifier':
+            self.retrain_classifier(epochs)
+        elif operation == 'attack':
+            self.clear_outputdirs()
+            self.load_model()
+            self.add_patches_to_imgs()
+        elif operation == 'defence':
+            self.load_model()
+            self.start_defence(defence_type, test_dir) 
 
         
     def build_datasetloader(self):
@@ -104,7 +116,7 @@ class Index:
                                                 data_dir = os.path.join(self.data_dir, 'val'),
                                                 transform=self.data_transforms,
                                                 lbl_mapping=self.lbl_le_mapping)
-        self.train_dataloader, self.val_dataloader, self.train_len, self.val_len = get_dataloader(imagenette_train_dataset, imagenette_val_dataset, 512, True)
+        self.train_dataloader, self.val_dataloader, self.train_len, self.val_len = get_dataloader(imagenette_train_dataset, imagenette_val_dataset)
         print('\nLength of train dataset: ', self.train_len)
         print('Length of val dataset: ', self.val_len, '\n')
 
@@ -115,6 +127,11 @@ class Index:
         self.model_name = model_name
         if model_name == 'resnet18':
             self.model = Resnet18()
+        elif model_name == 'resnet50':
+            self.model = Resnet50()
+        elif model_name == 'inception':
+            self.model = InceptionV3()
+
         self.model = self.model.double()
         self.optimizer = torch.optim.SGD(self.model.parameters(), lr = 0.001, momentum=0.9)
         self.model.to(self.device)
@@ -163,9 +180,10 @@ class Index:
         preds_attacked =  torch.argmax(op_attacked, dim=1, keepdims=True).cpu().numpy()
         x_clean.cpu()
         x_attacked.cpu()
+        defpreds = torch.ones((x_clean.size()[0],)) * -1
         pd_data = []
-        for fn,y,cpred,apred,coords in zip(filenames, lbls, preds_clean, preds_attacked, bb_idx):
-            pd_data.append([fn, y.item(), cpred[0], apred[0], coords[0].item(), coords[1].item(), coords[2].item(), coords[3].item()])
+        for fn,y,cpred,apred,dpred,coords in zip(filenames, lbls, preds_clean, preds_attacked, defpreds, bb_idx):
+            pd_data.append([fn, y.item(), cpred[0], apred[0], dpred.item(), coords[0].item(), coords[1].item(), coords[2].item(), coords[3].item()])
         pdx = pd.DataFrame(pd_data, columns=self.columns)
         target_df = pd.concat([target_df, pdx], ignore_index = True)
         target_df.to_csv(filepath)
@@ -194,13 +212,13 @@ class Index:
             sample_batch['label'],
             sample_batch['filename'], self.val_df, 'val')
 
-    def retrain_classifier(self):
+    def retrain_classifier(self, num_epochs = 2):
         print('Retraining classifier on 10 classes')
         output_dir = os.path.join(os.getcwd(), self.patch_dir)
         self.model = self.model.double()
         self.model.train()
         loss_history = []
-        for i in range(2):
+        for i in range(num_epochs):
             print(f"Running epoch {i}")
             running_loss = 0.0
             for i_batch, sample_batch in enumerate(self.train_dataloader):
@@ -237,12 +255,15 @@ class Index:
         self.save_model(acc, running_loss)
 
     def start_defence(self, defence_type = 'sign-indp'):
-        print(defence_type)
         if defence_type == 'yolo-mask':
+            yolov5 = YOLOMask()
+            #yolov5.read_test_results('yolov5/runs/train/yolo-patch-detection-sm-final/weights/best.pt', self.model)
+            model_weight_path = ''
+            test_df = yolov5.read_test_results('val', self.model)
+            self.check_accuracy(test_df, self.val_len)
             #do something else
             #self.initialize_csv_for_bb()
             #self.prepare_train_val_txt()
-            pass
         else:
             self.model.cpu()
             self.model.eval()
@@ -310,9 +331,16 @@ if __name__ == "__main__":
     torch.backends.cudnn.deterministic = True
 
     parser = argparse.ArgumentParser()
+    parser.add_argument('--crop_size', default=256, type=int)
+    parser.add_argument('--rescale_size', default=224, type=int)
+    parser.add_argument('--model_name', default='resnet18')
+    parser.add_argument('--operation', default='train-classifier')
     parser.add_argument('--attack_shape', default='square')
-    parser.add_argument('--defence_type', default='sign-indp')
+    parser.add_argument('--defence_type', default='yolo-mask')
+    parser.add_argument('--epochs', default=2, type=int)
+    parser.add_argument('--test_dir', default='yolov5/runs/detect/exp2/labels')
     args = parser.parse_args()
-    index = Index()
-    index.start_program(args.defence_type)
-    
+    index = Index(args.model_name)
+    index.start_program(args.rescale_size, args.crop_size,
+    args.operation, args.defence_typ, args.epochs,
+    args.test_dir)

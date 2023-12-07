@@ -5,8 +5,8 @@ import shutil
 def convert_to_yolov5_format(xmin, ymin, xmax, ymax, size = 224):
     boxw = xmax - xmin
     boxh = ymax - ymin
-    xc = xmin + xmax / 2.0
-    yc = ymin + ymax / 2.0
+    xc = (xmin + xmax) / 2.0
+    yc = (ymin + ymax) / 2.0
     xc/=size
     yc/=size
     boxw/=size
@@ -29,30 +29,32 @@ def make_labels(src_df, all_files, fnspath, label = 1):
             xc, yc, w, h = convert_to_yolov5_format(xmin, ymin, xmax, ymax)
             fnstr = f"{label} {xc} {yc} {w} {h}"
             Np+=1
-            dimgpath = os.path.join(os.getcwd(), f'yolov5-attacked-images/{split}/images/{imgname}')
-            dlblpath = os.path.join(os.getcwd(), f'yolov5-attacked-images/{split}/labels/{imgname.replace("JPEG", "txt")}')
+            dimgpath = os.path.join(os.getcwd(), f'{yolopath}/{split}/images/{imgname}')
+            dlblpath = os.path.join(os.getcwd(), f'{yolopath}/{split}/labels/{imgname.replace("JPEG", "txt")}')
             srcimgpath = os.path.join(fnspath, f'{imgname}')
             shutil.copyfile(srcimgpath, dimgpath)
         else:
             fnstr = "0 0.0 0.0 0.0 0.0"
             Nn+=1
-            dimgpath = os.path.join(os.getcwd(), f'yolov5-attacked-images/{split}/images/{fn}')
-            dlblpath = os.path.join(os.getcwd(), f'yolov5-attacked-images/{split}/labels/{fn.replace("JPEG", "txt")}')
+            dimgpath = os.path.join(os.getcwd(), f'{yolopath}/{split}/images/{fn}')
+            dlblpath = os.path.join(os.getcwd(), f'{yolopath}/{split}/labels/{fn.replace("JPEG", "txt")}')
             srcimgpath = os.path.join(fnspath, f'{fn}')
             shutil.copyfile(srcimgpath, dimgpath)
-            dlblpath = os.path.join(os.getcwd(), f'yolov5-attacked-images/{split}/labels/{fn.replace("JPEG", "txt")}')
+            dlblpath = os.path.join(os.getcwd(), f'{yolopath}/{split}/labels/{fn.replace("JPEG", "txt")}')
             #print('neg example', srcimgpath, dimgpath, dlblpath)
         
         with open(dlblpath, 'w+') as fp:
             fp.write(fnstr)
     return Np, Nn
 
+yolopath = 'data/yolov5-attacked-images'
 #reset directory
-shutil.rmtree('yolov5-attacked-images')
+if os.path.exists(yolopath):
+    shutil.rmtree(yolopath)
 
-all_yolov5_paths = ['yolov5-attacked-images',
-'yolov5-attacked-images/train', 'yolov5-attacked-images/train/images', 'yolov5-attacked-images/train/labels',
-'yolov5-attacked-images/val', 'yolov5-attacked-images/val/images', 'yolov5-attacked-images/val/labels'
+all_yolov5_paths = ['data/yolov5-attacked-images',
+'data/yolov5-attacked-images/train', 'data/yolov5-attacked-images/train/images', 'data/yolov5-attacked-images/train/labels',
+'data/yolov5-attacked-images/val', 'data/yolov5-attacked-images/val/images', 'data/yolov5-attacked-images/val/labels'
 ]
 # make all directories
 for p in all_yolov5_paths:
@@ -63,7 +65,7 @@ for p in all_yolov5_paths:
 data_dirs = ['English_springer', 'French_horn', 'cassette_player', 'chain_saw', 'church', 'garbage_truck', 'gas_pump', 'golf_ball', 'parachute', 'tench']
 
 neg_src_dir = 'data/imagenette2'
-pos_src_dir = 'attacked-images'
+pos_src_dir = 'data/attacked-images'
 N = 0
 Np = 0
 Nn = 0
@@ -90,3 +92,19 @@ for split in ['train', 'val']:
             
 
 print('No of images copied', N, Np, Nn)
+dyolopath = os.path.join(os.getcwd(), f'yolov5/{yolopath}')
+if os.path.exists(dyolopath):
+    shutil.rmtree(dyolopath)
+    
+syolopath = os.path.join(os.getcwd(), yolopath)
+print(os.listdir())
+print(syolopath, dyolopath)
+shutil.copytree(syolopath, dyolopath)
+os.chdir(f'yolov5/{yolopath}')
+
+for split in ['train', 'val']:
+    impath = os.path.join(os.getcwd(), f'{split}/images')
+    all_files = [os.path.join(impath, fname) for fname in os.listdir(impath)]
+    txt_path = os.path.join(os.getcwd(), f'{split}.txt')
+    with open(txt_path, 'w+', encoding='utf-8') as fp:
+        fp.writelines("\n".join(all_files))
