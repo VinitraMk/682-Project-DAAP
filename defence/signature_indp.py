@@ -49,10 +49,10 @@ class SignatureIndp():
     
     def __whitewash_img(self, bx, by, ex, ey, img):
         whitewash_mask = torch.clone(img)
-        whitewash_mask[:, :, :, :bx] = 255
-        whitewash_mask[:, :, :by, :] = 255
-        whitewash_mask[:, :, :, ex:] = 255
-        whitewash_mask[:, :, ey:, :] = 255
+        whitewash_mask[:, :, :bx] = 255
+        whitewash_mask[:, :by, :] = 255
+        whitewash_mask[:, :, ex:] = 255
+        whitewash_mask[:, ey:, :] = 255
         return whitewash_mask
 
 
@@ -60,21 +60,20 @@ class SignatureIndp():
         attack_predictions = []
         defence_predictions = []
         for i in range(X.size()[0]):
+            #print(f'Screen image {i}')
             is_min_img = False
             bx, by = self.start_x, self.start_y
             ex, ey = self.end_x, self.end_y 
             img = X[i]
-            print('sign indp', img.size())
             attacked_preds = self.model(img.unsqueeze(0))
-            full_img_class = torch.argmax(attacked_preds, dim=1)
-            print('full img class pred', full_img_class.size())
+            full_img_class = torch.argmax(attacked_preds, dim=1)[0].item()
             attack_predictions.append(full_img_class)
             defence_class = -1
             while not(is_min_img):
                 bx, by, ex, ey, is_full_img_region = self.__downsize_img(bx, by, ex, ey)
-                img_whitewashed = self.__whitewash_img(bx, by, ex, ey, img).reshape((self.H, self.W, 3))
-                attacked_preds = self.model(img_whitewashed)
-                attacked_class = torch.argmax(attacked_preds, dim=1)
+                img_whitewashed = self.__whitewash_img(bx, by, ex, ey, img)
+                attacked_preds = self.model(img_whitewashed.unsqueeze(0))
+                attacked_class = torch.argmax(attacked_preds, dim=1)[0].item()
                 if full_img_class != attacked_class:
                     defence_class = attacked_class
                     break
@@ -87,14 +86,14 @@ class SignatureIndp():
                 defence_predictions.append(defence_class)
             else:
                 defence_predictions.append(full_img_class)
-        return attack_predictions, defence_predictions
+        return torch.tensor(attack_predictions), torch.tensor(defence_predictions)
             
     def run(self, X, y):
-        print('\nRun signature independent adversarial patch detector program')
         self.__initialize_seed_region()
-        self.__start_test(X, y)
+        return self.__start_test(X, y)
 
 
 if __name__ == "__main__":
     sign_indp = SignatureIndp()
     sign_indp.run()
+    

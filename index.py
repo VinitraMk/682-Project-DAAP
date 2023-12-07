@@ -274,20 +274,21 @@ class Index:
             attacked_acc = 0.0
             defence_acc = 0.0
             for batch_i, batch in enumerate(self.val_dataloader):
+                print(f'Screening batch {batch_i}')
                 attack_predictions, defence_predictions = \
                 sign_def.run(batch['image'], batch['label'])
                 clean_class = torch.argmax(self.model(self.normalizer(batch['image'])), dim=1)
-                clean_acc += (clean_acc == batch['label']).sum()
+                clean_acc += (clean_class == batch['label']).sum()
                 attacked_acc += (attack_predictions == batch['label']).sum()
                 defence_acc += (defence_predictions == batch['label']).sum()
-            clean_acc /= len(self.val_dataloader)
-            attacked_acc /= len(self.val_dataloader)
-            defence_acc /= len(self.val_dataloader)
+            clean_acc /= self.val_len
+            attacked_acc /= self.val_len
+            defence_acc /= self.val_len
             print(f'Results with {self.model_name}')
             print('Clean image accuracy: ', clean_acc)
             print('Attacked image accuracy: ', attacked_acc)
             print('Defence image accuracy: ', defence_acc)
-
+            
     def prepare_train_val_txt(self):
         for split in ['train', 'val']:
             patch_path = os.path.join(os.getcwd(),
@@ -341,7 +342,7 @@ if __name__ == "__main__":
     parser.add_argument('--defence_type', default='yolo-mask')
     parser.add_argument('--epochs', default=2, type=int)
     parser.add_argument('--test_dir', default='yolov5/runs/detect/exp2/labels')
-    parser.add_argument('--subset-size', default=-1, type=int)
+    parser.add_argument('--subset_size', default=-1, type=int)
     parser.add_argument('--batch_size', default=64, type=int)
     args = parser.parse_args()
     index = Index(args.model_name)
