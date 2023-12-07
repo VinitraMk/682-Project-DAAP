@@ -14,7 +14,7 @@ class YOLOMask:
     weights_path = 'runs/train/yolo-patch-detection-sm5/weights/best.pt'
     script_train = 'yolov5/train.py'
     script_detect = 'yolov5/detect.py'
-    results_path = 'yolov5/runs/detect/exp3/labels'
+    results_path = 'yolov5/runs/detect/exp2/labels'
     columns = ['filename', 'patch-class', 'true-label', 'clean-prediction', 'attacked-prediction', 'defence-prediction', 'xmin', 'ymin', 'xmax', 'ymax']
     output_dir = 'output/attacked-imgs-bbox-preds.csv'
     mask_dir = 'data/yolo-mask-images'
@@ -33,7 +33,7 @@ class YOLOMask:
         ymin = 0
         xmax = 0
         ymax = 0
-        with open(fpath) as f:
+        with open(fpath, 'r', encoding='utf-8') as f:
             lines = f.readlines()
             label, xc, yc, w, h = lines[0].rstrip().split(" ")
             xc = float(xc)
@@ -72,10 +72,12 @@ class YOLOMask:
         self.yolo_model = torch.hub.load('ultralytics/yolov5', 'custom',
         path='yolov5/runs/train/yolo-patch-detection-sm-final/weights/best.pt', force_reload=True)
 
-    def read_test_results(self, mode, model):
+    def read_test_results(self, test_dir, mode, model):
         model.eval()
+        self.results_path = test_dir
         self.__initialize_mask_dirs()
         results_path = self.get_rel2root(self.results_path)
+        print('experiment to be evaluated', results_path)
         all_lbls = os.listdir(results_path)
         batch_mask_imgs = torch.empty((1, 3, 224, 224))
         srccsv = f'{mode}/{mode}_results.csv'

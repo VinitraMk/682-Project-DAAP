@@ -83,9 +83,9 @@ def get_inv_normalizer():
 
 def get_imagenette_transforms(rescale_size = 256, crop_size = 224):
     data_transforms = transforms.Compose([
-            Rescale(256),
+            Rescale(rescale_size),
             ToTensor(),
-            CenterCrop(224)])
+            CenterCrop(crop_size)])
     '''
     data_transforms = transforms.Compose([
             Resize(rescale_size),
