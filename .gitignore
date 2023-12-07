@@ -12,3 +12,4 @@ data/**/*.txt
 
 models/backup
 temp_id
+models/retrained-classifiers/resnet50.pt
