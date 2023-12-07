@@ -83,7 +83,7 @@ class Index:
 
     def start_program(self, rescale_size = 256, crop_size = 224,
         operation = 'train-classifier', defence_type = 'sign-indp',
-        test_dir = 'yolov5/runs/detect/exp2/labels', epochs = 2, subset_size = -1):
+        epochs = 2, test_dir = 'yolov5/runs/detect/exp2/labels', subset_size = -1):
         # clean up gray scale images from the directory [temporary solution]
         print('program started for operation', operation)
         #cleanup_images(self.data_dir)
@@ -348,3 +348,4 @@ if __name__ == "__main__":
     index.start_program(args.rescale_size, args.crop_size,
     args.operation, args.defence_type, args.epochs,
     args.test_dir, args.subset_size)
+
