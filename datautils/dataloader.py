@@ -5,7 +5,8 @@ def get_dataloader(traindataset, valdataset, subset_len = 128, get_subset = Fals
     if get_subset:
         random_els = torch.randint(0, len(traindataset), (subset_len,)).tolist()
         trainset = torch.utils.data.Subset(traindataset, random_els)
-        random_els = torch.randint(0, len(valdataset), (subset_len,)).tolist()
+        val_len = int(0.4 * subset_len)
+        random_els = torch.randint(0, len(valdataset), (val_len,)).tolist()
         valset = torch.utils.data.Subset(valdataset, random_els)
     else:
         trainset = traindataset
@@ -14,7 +15,7 @@ def get_dataloader(traindataset, valdataset, subset_len = 128, get_subset = Fals
     val_len = len(valset)
     train_len = len(trainset)
     train_dataloader = DataLoader(trainset, batch_size=64,
-                            shuffle=True, num_workers=2)
+                            shuffle=True, num_workers=0)
     val_dataloader = DataLoader(valset, batch_size=64,
-                            shuffle=True, num_workers=2)
+                            shuffle=True, num_workers=0)
     return train_dataloader, val_dataloader, train_len, val_len

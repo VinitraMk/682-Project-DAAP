@@ -1,5 +1,5 @@
-train: patched-images/train.txt
-val: patched-images/train.txt
+train: attacked-images/train.txt
+val: attacked-images/train.txt
 
 # number of classes
 nc: 2
