@@ -36,7 +36,7 @@ class Index:
 
     def __init__(self):
         self.data_dir = 'data/imagenette2'
-        self.patch_dir = 'attacked-images'
+        self.patch_dir = 'data/attacked-images'
         self.output_dir = 'output'
         self.train_labels_path = self.data_dir + '/train_images.csv'
         self.val_labels_path = self.data_dir + '/val_images.csv'
@@ -79,7 +79,7 @@ class Index:
         print('program started')
         #cleanup_images(self.data_dir)
         #utils.make_csv(self.data_dir)
-        self.clear_outputdirs()
+        #self.clear_outputdirs()
         self.initialize_transforms()
         self.build_datasetloader()
         self.initialize_model(self.model_name)
@@ -121,7 +121,7 @@ class Index:
     
     def __draw_bounding_box(self, attacked_img_batch, box_coord):
         for i in range(attacked_img_batch.size()[0]):
-            boxes = torch.tensor([[box_coord[i][1], box_coord[i][0], box_coord[i][3], box_coord[i][2]]])
+            boxes = torch.tensor([[box_coord[i][0], box_coord[i][1], box_coord[i][2], box_coord[i][3]]])
             attacked_img_batch[i] = draw_bounding_boxes(image=(255 * attacked_img_batch[i]).to(torch.uint8),
                 boxes=boxes, colors="red")
             attacked_img_batch[i] /= 255
@@ -133,11 +133,11 @@ class Index:
             img = unnormalized_imgs[i].cpu()#.transpose(1, 2, 0)
             #test_dir = os.path.join(os.getcwd(), 'test-attacked-images')
             #save_image(img, os.path.join(test_dir, 'sample.JPEG'))
-            output_dir = os.path.join(os.getcwd(), f'attacked-images/{mode}')
+            output_dir = os.path.join(os.getcwd(), f'{self.patch_dir}/{mode}')
             save_image(img, os.path.join(output_dir, f"{filenames[i]}"))
 
     def __insert_patch_on_batch(self, img_batch, lbls, filenames, target_df, mode = 'train'):
-        filepath = os.path.join(os.getcwd(), f'attacked-images/{mode}/{mode}_results.csv')
+        filepath = os.path.join(os.getcwd(), f'{self.patch_dir}/{mode}/{mode}_results.csv')
         with open(os.path.join(os.getcwd(), "data/class_id2name.json")) as f:
            target_to_classname = eval(f.read())
 
@@ -289,7 +289,7 @@ class Index:
     def load_model(self):
         print("\nLoading pretrained model")
         model_path = os.path.join(os.getcwd(), f'models/retrained-classifiers/{self.model_name}.pt')
-        model_chkpoint = torch.load(model_path)
+        model_chkpoint = torch.load(model_path, map_location=torch.device(self.device))
         self.model.load_state_dict(model_chkpoint['model_state_dict'])
         self.model.eval()
     

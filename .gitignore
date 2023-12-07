@@ -2,7 +2,7 @@ data/**/*.jpg
 data/**/*.jpeg
 data/**/*.JPEG
 data/**/*.png
-data/**/*.csv
+data/**/*.txt
 
 **/.DS_Store
 
