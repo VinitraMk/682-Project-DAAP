@@ -227,7 +227,10 @@ class Index:
                 self.optimizer.zero_grad()
                 imgs = self.normalizer(sample_batch['image']).to(self.device).double()
                 lbls = sample_batch['label'].to(self.device)
-                output = self.model(imgs)
+                if self.model_name == 'inception':
+                    output,_ = self.model(imgs)
+                else:
+                    output = self.model(imgs)
                 loss = self.loss_criterion(output, lbls)
                 loss.backward()
                 running_loss += loss.detach().item()
@@ -256,7 +259,7 @@ class Index:
         print('Loss of the trained model: ', running_loss)
         self.save_model(acc, running_loss)
 
-    def start_defence(self, defence_type = 'sign-indp'):
+    def start_defence(self, defence_type = 'sign-indp', test_dir = 'yolov5/runs/detect/exp2/labels'):
         if defence_type == 'yolo-mask':
             yolov5 = YOLOMask()
             #yolov5.read_test_results('yolov5/runs/train/yolo-patch-detection-sm-final/weights/best.pt', self.model)
