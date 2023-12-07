@@ -346,5 +346,5 @@ if __name__ == "__main__":
     args = parser.parse_args()
     index = Index(args.model_name)
     index.start_program(args.rescale_size, args.crop_size,
-    args.operation, args.defence_typ, args.epochs,
+    args.operation, args.defence_type, args.epochs,
     args.test_dir, args.subset_size)
