@@ -83,7 +83,7 @@ class Index:
 
     def start_program(self, rescale_size = 256, crop_size = 224,
         operation = 'train-classifier', defence_type = 'sign-indp',
-        epochs = 2, test_dir = 'yolov5/runs/detect/exp2/labels', subset_size = -1):
+        epochs = 2, test_dir = 'yolov5/runs/detect/exp2/labels', subset_size = -1, batch_size = 64):
         # clean up gray scale images from the directory [temporary solution]
         print('program started for operation', operation)
         #cleanup_images(self.data_dir)
@@ -106,7 +106,6 @@ class Index:
         print('building datasets...')
         self.lbl_le_mapping = utils.make_csv(self.data_dir)
 
-        batch_size = 64
 
         imagenette_train_dataset = ImageNetDataset(labels_path = self.train_labels_path,
                                                 data_dir = os.path.join(self.data_dir, 'train'),
@@ -117,9 +116,9 @@ class Index:
                                                 transform=self.data_transforms,
                                                 lbl_mapping=self.lbl_le_mapping)
         if subset_size == -1:
-            self.train_dataloader, self.val_dataloader, self.train_len, self.val_len = get_dataloader(imagenette_train_dataset, imagenette_val_dataset)
+            self.train_dataloader, self.val_dataloader, self.train_len, self.val_len = get_dataloader(imagenette_train_dataset, imagenette_val_dataset, batch_size)
         else:
-            self.train_dataloader, self.val_dataloader, self.train_len, self.val_len = get_dataloader(imagenette_train_dataset, imagenette_val_dataset, subset_size, True)
+            self.train_dataloader, self.val_dataloader, self.train_len, self.val_len = get_dataloader(imagenette_train_dataset, imagenette_val_dataset, batch_size, subset_size, True)
         print('\nLength of train dataset: ', self.train_len)
         print('Length of val dataset: ', self.val_len, '\n')
 
@@ -334,8 +333,8 @@ if __name__ == "__main__":
     torch.backends.cudnn.deterministic = True
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('--crop_size', default=256, type=int)
-    parser.add_argument('--rescale_size', default=224, type=int)
+    parser.add_argument('--crop_size', default=224, type=int)
+    parser.add_argument('--rescale_size', default=256, type=int)
     parser.add_argument('--model_name', default='resnet18')
     parser.add_argument('--operation', default='train-classifier')
     parser.add_argument('--attack_shape', default='square')
@@ -343,9 +342,10 @@ if __name__ == "__main__":
     parser.add_argument('--epochs', default=2, type=int)
     parser.add_argument('--test_dir', default='yolov5/runs/detect/exp2/labels')
     parser.add_argument('--subset-size', default=-1, type=int)
+    parser.add_argument('--batch_size', default=64, type=int)
     args = parser.parse_args()
     index = Index(args.model_name)
     index.start_program(args.rescale_size, args.crop_size,
     args.operation, args.defence_type, args.epochs,
-    args.test_dir, args.subset_size)
+    args.test_dir, args.subset_size, args.batch_size)
 
