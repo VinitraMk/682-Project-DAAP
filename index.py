@@ -83,13 +83,13 @@ class Index:
 
     def start_program(self, rescale_size = 256, crop_size = 224,
         operation = 'train-classifier', defence_type = 'sign-indp',
-        test_dir = 'yolov5/runs/detect/exp2/labels', epochs = 2):
+        test_dir = 'yolov5/runs/detect/exp2/labels', epochs = 2, subset_size = -1):
         # clean up gray scale images from the directory [temporary solution]
         print('program started for operation', operation)
         #cleanup_images(self.data_dir)
         #utils.make_csv(self.data_dir)
         self.initialize_transforms(rescale_size, crop_size)
-        self.build_datasetloader()
+        self.build_datasetloader(subset_size)
         self.initialize_model(self.model_name)
         if operation == 'train-classifier':
             self.retrain_classifier(epochs)
@@ -102,7 +102,7 @@ class Index:
             self.start_defence(defence_type, test_dir) 
 
         
-    def build_datasetloader(self):
+    def build_datasetloader(self, subset_size = -1):
         print('building datasets...')
         self.lbl_le_mapping = utils.make_csv(self.data_dir)
 
@@ -116,7 +116,10 @@ class Index:
                                                 data_dir = os.path.join(self.data_dir, 'val'),
                                                 transform=self.data_transforms,
                                                 lbl_mapping=self.lbl_le_mapping)
-        self.train_dataloader, self.val_dataloader, self.train_len, self.val_len = get_dataloader(imagenette_train_dataset, imagenette_val_dataset)
+        if subset_size == -1:
+            self.train_dataloader, self.val_dataloader, self.train_len, self.val_len = get_dataloader(imagenette_train_dataset, imagenette_val_dataset)
+        else:
+            self.train_dataloader, self.val_dataloader, self.train_len, self.val_len = get_dataloader(imagenette_train_dataset, imagenette_val_dataset, subset_size, True)
         print('\nLength of train dataset: ', self.train_len)
         print('Length of val dataset: ', self.val_len, '\n')
 
@@ -339,8 +342,9 @@ if __name__ == "__main__":
     parser.add_argument('--defence_type', default='yolo-mask')
     parser.add_argument('--epochs', default=2, type=int)
     parser.add_argument('--test_dir', default='yolov5/runs/detect/exp2/labels')
+    parser.add_argument('--subset-size', default=-1, type=int)
     args = parser.parse_args()
     index = Index(args.model_name)
     index.start_program(args.rescale_size, args.crop_size,
     args.operation, args.defence_typ, args.epochs,
-    args.test_dir)
+    args.test_dir, args.subset_size)
