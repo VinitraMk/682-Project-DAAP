@@ -12,3 +12,4 @@ data/**/*.txt
 
 models/backup
 temp_id
+*.pt

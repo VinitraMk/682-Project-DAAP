@@ -64,7 +64,7 @@ class PatchAttack(nn.Module):
 
     def __get_mask_indices(self, patch):
         idxs = (patch[0, :, :] != 0).nonzero()
-        xmin, ymin, xmax, ymax = idxs[0][0], idxs[0][1], idxs[-1][0], idxs[-1][1]
+        ymin, xmin, ymax, xmax = idxs[0][0], idxs[0][1], idxs[-1][0], idxs[-1][1]
         mask_idx = torch.tensor([xmin, ymin, xmax, ymax])
         return mask_idx
     

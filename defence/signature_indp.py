@@ -3,6 +3,7 @@ from torchvision.io import read_image
 import matplotlib.pyplot as plt
 import torch.nn as nn
 from models.ots_models import get_model
+from utils
 
 class SignatureIndp():
     contractn_size = 20
@@ -18,6 +19,7 @@ class SignatureIndp():
         #_, self.H, self.W = self.img.size()
         self.H, self.W = target_H, target_W
         self.model = model
+        self.normalizer = get_norm
         
 
     def __initialize_seed_region(self):

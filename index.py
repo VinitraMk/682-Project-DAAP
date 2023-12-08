@@ -86,10 +86,10 @@ class Index:
         epochs = 2, test_dir = 'yolov5/runs/detect/exp2/labels', subset_size = -1, batch_size = 64):
         # clean up gray scale images from the directory [temporary solution]
         print('program started for operation', operation)
-        #cleanup_images(self.data_dir)
-        #utils.make_csv(self.data_dir)
+        cleanup_images(self.data_dir)
+        utils.make_csv(self.data_dir)
         self.initialize_transforms(rescale_size, crop_size)
-        self.build_datasetloader(subset_size)
+        self.build_datasetloader(subset_size, batch_size)
         self.initialize_model(self.model_name)
         if operation == 'train-classifier':
             self.retrain_classifier(epochs)
@@ -102,10 +102,9 @@ class Index:
             self.start_defence(defence_type, test_dir) 
 
         
-    def build_datasetloader(self, subset_size = -1):
+    def build_datasetloader(self, subset_size = -1, batch_size=64):
         print('building datasets...')
         self.lbl_le_mapping = utils.make_csv(self.data_dir)
-
 
         imagenette_train_dataset = ImageNetDataset(labels_path = self.train_labels_path,
                                                 data_dir = os.path.join(self.data_dir, 'train'),
@@ -347,6 +346,7 @@ if __name__ == "__main__":
     parser.add_argument('--test_dir', default='yolov5/runs/detect/exp2/labels')
     parser.add_argument('--subset_size', default=-1, type=int)
     parser.add_argument('--batch_size', default=64, type=int)
+
     args = parser.parse_args()
     index = Index(args.model_name)
     index.start_program(args.rescale_size, args.crop_size,
