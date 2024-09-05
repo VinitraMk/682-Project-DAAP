@@ -1,0 +1,15 @@
+data/**/*.jpg
+data/**/*.jpeg
+data/**/*.JPEG
+data/**/*.png
+data/**/*.txt
+
+**/.DS_Store
+
+**/__pycache__/**
+*.tgz
+*.zip
+
+models/backup
+temp_id
+*.pt
